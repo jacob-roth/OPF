@@ -1,9 +1,9 @@
-# module OPF
-
+module OPF
 using JuMP, JuMPUtil, Ipopt
 using MPCCases
 using Printf
 using Pkg
+## based on: https://github.com/StructJuMP/StructJuMP.jl/tree/master/examples/PowerGrid
 
 mutable struct OPFModel
     m::JuMP.Model
@@ -28,8 +28,5 @@ export nonunique
 include("jacobian.jl")
 export jac_x
 export dFdy_dFdx
-# export get_idx_id
-# export get_y
-# export get_F
 
-# end # module
+end # module
