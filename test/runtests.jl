@@ -16,6 +16,7 @@ using Test
 using MPCCases, Printf
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra
+using OPF
 include("../src/OPF.jl")
 
 ## -----------------------------------------------------------------------------
@@ -34,11 +35,11 @@ dxbar = copy(dm_eval.last_x);
 OPF.acopf_outputAll(dm, opfdata)
 
 ## stochastic acopf
-sm = sacopf_model(opfdata)
-sm = acopf_solve(sm, opfdata)
+sm = OPF.sacopf_model(opfdata)
+sm = OPF.acopf_solve(sm, opfdata)
 sm_eval = setup(sm.m);
 sxbar = copy(sm_eval.last_x);
-acopf_outputAll(sm, opfdata)
+OPF.acopf_outputAll(sm, opfdata)
 
 @testset "indexing" begin
 @test norm([ getvalue(dm.m[:Pg]);
@@ -71,5 +72,5 @@ include("compare.jl")
 ## -----------------------------------------------------------------------------
 ## get sensitivities
 ## -----------------------------------------------------------------------------
-dFdy, dFdx = dFdy_dFdx(sm_eval, sxbar, opfdata)
+dFdy, dFdx = OPF.dFdy_dFdx(sm_eval, sxbar, opfdata)
 dydx = Matrix(dFdy) \ Matrix(dFdx)

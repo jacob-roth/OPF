@@ -79,22 +79,22 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
       consRhs = zeros(4*nbus+2*nflowlim)
     end
     MathProgBase.eval_g(d, consRhs, optvec)
-
-
-    #println(consRhs)
+    # d = setup(opfmodel)
+    # c!(consRhs, optvec, model=d)
 
     @printf("================ Lines within %d pct of flow capacity ===================\n", within)
     println("Line   From Bus    To Bus    At capacity")
 
-    nlim=1
+    nlim=0
     for l in 1:nline
       if lines[l].rateA!=0 && lines[l].rateA<1.0e10
         flowmax=(lines[l].rateA/baseMVA)^2
-        idx = 2*nbus+nlim
+        idx = 2nbus + 2nlim + 1
 
         if( (consRhs[idx]+flowmax)  >= (1-within/100)^2*flowmax )
-          @printf("%3d      %3d      %3d        %5.3f pct\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx]+flowmax)/flowmax))
-          #@printf("%7.4f   %7.4f    %7.4f \n", consRhs[idx], consRhs[idx]+flowmax,  flowmax)
+          @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx]+flowmax)/flowmax))
+        elseif( (consRhs[idx + 1]+flowmax)  >= (1-within/100)^2*flowmax )
+          @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx + 1]+flowmax)/flowmax))
         end
         nlim += 1
       end

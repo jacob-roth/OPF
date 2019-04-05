@@ -100,5 +100,6 @@ dm = OPF.acopf_model(opfdata, options)
 dm = OPF.acopf_solve(dm, opfdata)
 dm_eval = setup(dm.m);
 dxbar = copy(dm_eval.last_x);
+OPF.acopf_outputAll(dm, opfdata)
 @test norm(dxbar - x̄) <= tol
 end # testset
