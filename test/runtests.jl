@@ -27,11 +27,11 @@ opfdata = load_case(case, path, other=false);
 ## compare deterministic and "stochastic"
 ## -----------------------------------------------------------------------------
 ## deterministic acopf
-dm = acopf_model(opfdata)
-dm = acopf_solve(dm, opfdata)
+dm = OPF.acopf_model(opfdata)
+dm = OPF.acopf_solve(dm, opfdata)
 dm_eval = setup(dm.m);
 dxbar = copy(dm_eval.last_x);
-acopf_outputAll(dm, opfdata)
+OPF.acopf_outputAll(dm, opfdata)
 
 ## stochastic acopf
 sm = sacopf_model(opfdata)
@@ -62,6 +62,11 @@ acopf_outputAll(sm, opfdata)
              getvalue(getindex(sm.m, :Pd));
              getvalue(getindex(sm.m, :Qd)) ] - sxbar) <= tol
 end
+
+## -----------------------------------------------------------------------------
+## compare with other model
+## -----------------------------------------------------------------------------
+include("compare.jl")
 
 ## -----------------------------------------------------------------------------
 ## get sensitivities

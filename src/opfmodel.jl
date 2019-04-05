@@ -1,12 +1,19 @@
-function acopf_model(opf_data)
+function acopf_model(opf_data, options::Dict=Dict())
+  # parse options
+  lossless = haskey(options, :lossless) ? options[:lossless] : false
+  current_rating = haskey(options, :current_rating) ? options[:current_rating] : false
+  if lossless && !current_rating
+    println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
+    current_rating = true
+  end
+
   # shortcuts for compactness
   lines = opf_data.lines; buses = opf_data.buses; generators = opf_data.generators; baseMVA = opf_data.baseMVA
   busIdx = opf_data.BusIdx; FromLines = opf_data.FromLines; ToLines = opf_data.ToLines; BusGeners = opf_data.BusGenerators;
-
   nbus = length(buses); nline = length(lines); ngen  = length(generators)
 
   # branch admitances
-  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA)
+  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA; lossless=lossless)
 
   #
   # model
@@ -19,13 +26,14 @@ function acopf_model(opf_data)
 
   @variable(opfmodel, generators[i].Pmin <= Pg[i=1:ngen] <= generators[i].Pmax)
   @variable(opfmodel, generators[i].Qmin <= Qg[i=1:ngen] <= generators[i].Qmax)
-
   @variable(opfmodel, buses[i].Vmin <= Vm[i=1:nbus] <= buses[i].Vmax)
-  @variable(opfmodel, Va[1:nbus])
+  @variable(opfmodel, -pi <= Va[1:nbus] <= pi)
+
   #fix the voltage angle at the reference bus
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")
-    set_lower_bound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
-    set_upper_bound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
+    # set_lower_bound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
+    # set_upper_bound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
+    fix(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va; force = true)
   else
     setlowerbound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
     setupperbound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
@@ -65,27 +73,47 @@ function acopf_model(opf_data)
       nlinelim += 1
       flowmax=(lines[l].rateA/baseMVA)^2
 
-      #branch apparent power limits (from bus)
+      #branch apparent power limits (from bus); OR current limit (Anirudh)
       Yff_abs2=YffR[l]^2+YffI[l]^2; Yft_abs2=YftR[l]^2+YftI[l]^2
       Yre=YffR[l]*YftR[l]+YffI[l]*YftI[l]; Yim=-YffR[l]*YftI[l]+YffI[l]*YftR[l]
-      @NLconstraint(
-        opfmodel,
-	Vm[busIdx[lines[l].from]]^2 *
-	( Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
-	  + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
-	)
-        - flowmax <=0)
+      if current_rating == true
+        @NLconstraint(
+          opfmodel,
+          1.0 *
+  	      ( Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
+  	        + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+  	      )
+          - flowmax <=0)
+      else
+        @NLconstraint(
+          opfmodel,
+          Vm[busIdx[lines[l].from]]^2 *
+  	      ( Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
+  	        + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+  	      )
+          - flowmax <=0)
+      end
 
-      #branch apparent power limits (to bus)
+      #branch apparent power limits (to bus); OR current limit (Anirudh)
       Ytf_abs2=YtfR[l]^2+YtfI[l]^2; Ytt_abs2=YttR[l]^2+YttI[l]^2
       Yre=YtfR[l]*YttR[l]+YtfI[l]*YttI[l]; Yim=-YtfR[l]*YttI[l]+YtfI[l]*YttR[l]
-      @NLconstraint(
-        opfmodel,
-	Vm[busIdx[lines[l].to]]^2 *
-        ( Ytf_abs2*Vm[busIdx[lines[l].from]]^2 + Ytt_abs2*Vm[busIdx[lines[l].to]]^2
-          + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
-        )
-        - flowmax <=0)
+      if current_rating == true
+        @NLconstraint(
+          opfmodel,
+          1.0 *
+          ( Ytf_abs2*Vm[busIdx[lines[l].from]]^2 + Ytt_abs2*Vm[busIdx[lines[l].to]]^2
+            + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+          )
+          - flowmax <=0)
+      else
+        @NLconstraint(
+          opfmodel,
+          Vm[busIdx[lines[l].to]]^2 *
+          ( Ytf_abs2*Vm[busIdx[lines[l].from]]^2 + Ytt_abs2*Vm[busIdx[lines[l].to]]^2
+            + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+          )
+          - flowmax <=0)
+      end
     end
   end
 
