@@ -2,6 +2,7 @@ function acopf_model(opf_data, options::Dict=Dict())
   # parse options
   lossless = haskey(options, :lossless) ? options[:lossless] : false
   current_rating = haskey(options, :current_rating) ? options[:current_rating] : false
+  remove_Bshunt = haskey(options, :remove_Bshunt) ? options[:remove_Bshunt] : false
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -13,7 +14,7 @@ function acopf_model(opf_data, options::Dict=Dict())
   nbus = length(buses); nline = length(lines); ngen  = length(generators)
 
   # branch admitances
-  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA; lossless=lossless)
+  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA; lossless=lossless, remove_Bshunt=remove_Bshunt)
 
   #
   # model
@@ -31,8 +32,6 @@ function acopf_model(opf_data, options::Dict=Dict())
 
   #fix the voltage angle at the reference bus
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")
-    # set_lower_bound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
-    # set_upper_bound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
     fix(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va; force = true)
   else
     setlowerbound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
