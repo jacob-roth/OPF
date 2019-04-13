@@ -1,5 +1,6 @@
 module OPF
-using JuMP, JuMPUtil, Ipopt
+using JuMP, JuMPUtil, Ipopt, MathProgBase
+using SparseArrays
 using MPCCases
 using Printf
 using Pkg
@@ -10,6 +11,7 @@ mutable struct OPFModel
     status::Symbol
     kind::Symbol
 end
+export OPFModel
 
 include("opfmodel.jl")
 export acopf_model
@@ -27,6 +29,8 @@ export nonunique
 
 include("jacobian.jl")
 export jac_x
+export PF, dStilde_dV
+export get_idx_sets
 export dFdy_dFdx
 
 end # module
