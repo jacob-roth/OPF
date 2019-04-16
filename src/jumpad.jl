@@ -18,7 +18,8 @@ setvalue(x, [0.0; 0.0])
 @NLconstraint(m, constraint, 0.5 * sum(A[i, j] * x[i] * x[j] for i in eachindex(x)
                                                        for j in eachindex(x))
                                      + sum(b[i] * x[i] for i in eachindex(x)) <= 10)
-
+v = exp.(im .* x)
+@NLconstraint(m, constraint_imag, sum(real.(abs(v[i])) for i = 1:2) <= 100)
 ## AD constraint
 g = fill(NaN, 2)
 d = JuMP.NLPEvaluator(m)
