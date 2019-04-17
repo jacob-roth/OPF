@@ -125,29 +125,99 @@ function ccacopf_model(opf_data, options::Dict=Dict())
   B = imag.(Y); b_row, b_col, b_val = findnz(B)
   for q = 1:nbus # P, Q; equations
     for b = 1:nbus # Vm, Va; buses
-      h = mod1(b, nbus)
-      k = mod1(q, nbus)
+      h = busIdx[mod1(b, nbus)]
+      k = busIdx[mod1(q, nbus)]
       if h == k
-        IDX = filter(x -> x ≠ h, Y[h,:].nzind)
-        dP_dVa =   Vm[h] * Vm[k]          * sum( G[h,kk] * sin(Va[h]-Va[kk]) - B[h,kk] * cos(Va[h]-Va[kk]) for kk in IDX )
-        dP_dVm =  2Vm[h] * G[h,h] + Vm[k] * sum( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) for kk in IDX )
-        dQ_dVa =  -Vm[h] * Vm[k]          * sum( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) for kk in IDX )
-        dQ_dVm = -2Vm[h] * B[h,h] - Vm[k] * sum( G[h,kk] * sin(Va[h]-Va[kk]) - B[h,kk] * cos(Va[h]-Va[kk]) for kk in IDX )
+        IDX = Y[h,:].nzind
+        P = Vm[h] * sum(Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) ) for kk in IDX)
+        Q = Vm[h] * sum(Vm[kk] * ( G[h,kk] * sin(Va[h]-Va[kk]) + B[h,kk] * cos(Va[h]-Va[kk]) ) for kk in IDX)
+        dP_dVa = -Q/Vm[h] - B[h,h] * Vm[h]^2
+        dP_dVm =  P/Vm[h] + G[h,h] * Vm[h]
+        dQ_dVa =  P       - G[h,h] * Vm[h]^2
+        dQ_dVm =  Q/Vm[h] - B[h,h] * Vm[h]
+        # dP_dVa =  (1.0/Vm[h]) * ( Vm[h] * sum( Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk])) for kk in IDX) ) + G[h,h]*Vm[h]^2
+        # dP_dVm =  (1.0/Vm[h]) * ( Vm[h] * sum( Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk])) for kk in IDX) ) + G[h,h]*Vm[h]^2
+        # dQ_dVa =    Vm[h] * sum( Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk])) for kk in IDX) - G[h,h]*Vm[h]^2
+        # dQ_dVm =            sum( Vm[kk] * ( G[h,kk] * sin(Va[h]-Va[kk]) - B[h,kk] * cos(Va[h]-Va[kk])) for kk in IDX) - B[h,h]*Vm[h]
+        # IDX = filter(x -> x ≠ h, Y[h,:].nzind)
+        # dP_dVa =  -Vm[h] * Vm[k]          * sum( G[h,kk] * sin(Va[h]-Va[kk]) - B[h,kk] * cos(Va[h]-Va[kk]) for kk in IDX )
+        # dP_dVm =  2Vm[h] * G[h,h] + Vm[k] * sum( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) for kk in IDX )
+        # dQ_dVa =  -Vm[h] * Vm[k]          * sum( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) for kk in IDX )
+        # dQ_dVm = -2Vm[h] * B[h,h] - Vm[k] * sum( G[h,kk] * sin(Va[h]-Va[kk]) - B[h,kk] * cos(Va[h]-Va[kk]) for kk in IDX )
       else
         dP_dVa =  Vm[h] * Vm[k] * ( G[h,k] * sin(Va[h]-Va[k]) - B[h,k] * cos(Va[h]-Va[k]) )
         dP_dVm =  Vm[h]         * ( G[h,k] * cos(Va[h]-Va[k]) + B[h,k] * sin(Va[h]-Va[k]) )
         dQ_dVa =  Vm[h] * Vm[k] * ( G[h,k] * cos(Va[h]-Va[k]) + B[h,k] * sin(Va[h]-Va[k]) )
         dQ_dVm = -Vm[h]         * ( G[h,k] * sin(Va[h]-Va[k]) - B[h,k] * cos(Va[h]-Va[k]) )
       end
-      ## dP_dVa
-      J[q, b]           = dP_dVa
-      J[q, nbus+b]      = dP_dVm
-      J[nbus+q, b]      = dQ_dVa
-      J[nbus+q, nbus+b] = dQ_dVm
+      # J[q, b]           = dP_dVa
+      # J[q, nbus+b]      = dP_dVm
+      # J[nbus+q, b]      = dQ_dVa
+      # J[nbus+q, nbus+b] = dQ_dVm
+      J[q, b]           = dP_dVm
+      J[q, nbus+b]      = dP_dVa
+      J[nbus+q, b]      = dQ_dVm
+      J[nbus+q, nbus+b] = dQ_dVa
     end
   end
+  Z_bb = spzeros(nbus, nbus)
+  Z_bb = spzeros(nbus, nbus)
+  I_gen = spzeros(nbus, ngen)
+  for (i,j,v) in zip(opfdata.generators.bus, collect(1:ngen), ones(ngen))
+    I_gen[i,j] = v
+  end
+  Z_bg = spzeros(nbus, ngen)
+  dPdVm = J[1:nbus, 1:nbus]
+  dPdVa = J[1:nbus, (nbus+1):(2nbus)]
+  dQdVm = J[(nbus+1):(2nbus), 1:nbus]
+  dQdVa = J[(nbus+1):(2nbus), (nbus+1):(2nbus)]
+  JJ = [ -I_gen    Z_bg    dPdVm   dPdVa   I      Z_bb;
+          Z_bg    -I_gen   dQdVm   dQdVa   Z_bb   I    ]
+  J_numerical = J_numerical[1:60, :]
+  JJ - J_numerical
 
 
+
+
+          # G_1_1 = ( reduce(+, YffR[l] for l in FromLines[h]; init=0) + reduce(+, YttR[l] for l in ToLines[h]; init=0) + YshR[h] )
+          # G_1_2 = YftR[1]
+          # reduce(+, Vm[h]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[h]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[h]-Va[busIdx[lines[l].to]]  )) for l in FromLines[h]; init=0 )
+          # reduce(+, Vm[h]*Vm[busIdx[lines[l].from]]*( YtfR[l]*cos(Va[h]-Va[busIdx[lines[l].from]]) + YtfI[l]*sin(Va[h]-Va[busIdx[lines[l].from]])) for l in ToLines[h]  ; init=0 )
+          # dP_dVa =  (-1.0)      * ( Vm[h] * sum( Vm[kk] * ( G[h,kk] * sin(Va[h]-Va[k]) - B[h,kk] * cos(Va[h]-Va[kk])) for kk in IDX) ) - B[h,h]*Vm[h]^2
+          #
+          # ( sum( YffR[l] for l in FromLines[b]) + sum( YttR[l] for l in ToLines[b]) + YshR[b] ) * Vm[b]^2
+          # + sum( Vm[b]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[b]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[b]-Va[busIdx[lines[l].to]]  )) for l in FromLines[b] )
+          # + sum( Vm[b]*Vm[busIdx[lines[l].from]]*( YtfR[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfI[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]   )
+          #
+          # for l in ToLines[b]
+          #   println(YffR[l])
+          # end
+          # for l in FromLines[b]
+          #   println(YffR[l])
+          # end
+          #
+          # ## JR
+          # dP_dVm = 0
+          # for kk in IDX
+          #   val = Vm[h] * Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) )
+          #   global dP_dVm += val
+          #   println(dP_dVm, ", ", val)
+          # end
+          # # val = G[h,h]*Vm[h]^2
+          # # dP_dVm += val
+          # println(dP_dVm, ", ", val)
+          # Vm[h] * sum(Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) ) for kk in IDX)
+          #
+          # ## opf
+          # dP_dVm = 0
+          # for l in FromLines[h]
+          #   val = Vm[h]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[h]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[h]-Va[busIdx[lines[l].to]]  ))
+          #   global dP_dVm += val
+          #   println(dP_dVm, ", " , val)
+          # end
+          # val = sum(YffR[l] for l in FromLines[h])*Vm[h]^2
+          # dP_dVm += val
+          # println(dP_dVm, ", " , val)
 
 
   @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
