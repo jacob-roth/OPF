@@ -366,6 +366,52 @@ function om_jac_RGL_idx(opfdata::OPFData)
     return jac_RGL_idx
 end
 
+"""
+## `om_y_RGL_idx`: get `RGL`-partitioned index sets to extract `y` (variables)
+### arguments:
+    - `jac_RGL_idx::Dict`: full component dictionary from `om_jac_RGL_idx`
+    - `full::Bool`: option to return `Qg_RG` as a variable or not
+### returns:
+    - `yidx::Vector`: array of indixes for `y := ([Qg_RG], Vm_L, Va_GL)`
+"""
+function om_y_RGL_idx(jac_RGL_idx::Dict, full=false)
+    if full
+        yidx = [jac_RGL_idx[:y][:Qg_RG]; jac_RGL_idx[:y][:Vm_L]; jac_RGL_idx[:y][:Va_GL]]
+    else
+        yidx = [jac_RGL_idx[:y][:Vm_L]; jac_RGL_idx[:y][:Va_GL]]
+    end
+    return yidx
+end
+
+"""
+## `om_x_RGL_idx`: get `RGL`-partitioned index sets to extract `x` (parameters)
+### arguments:
+    - `jac_RGL_idx::Dict`: full component dictionary from `om_jac_RGL_idx`
+### returns:
+    - `xidx::Vector`: array of indixes for `x := (Pd_RGL, Qd_RGL)`
+"""
+function om_x_RGL_idx(jac_RGL_idx::Dict)
+    xidx = [jac_RGL_idx[:x][:Pd_RGL]; jac_RGL_idx[:x][:Qd_RGL]]
+    return xidx
+end
+
+"""
+## `om_f_RGL_idx`: get `RGL`-partitioned index sets to extract `f` (pfe equations)
+### arguments:
+    - `jac_RGL_idx::Dict`: full component dictionary from `om_jac_RGL_idx`
+    - `full::Bool`: option to return equations for `Qg_RG` or not
+### returns:
+    - `xidx::Vector`: array of indixes for `f := (P_G, P_L, [Q_R, Q_G], Q_L)`
+"""
+function om_f_RGL_idx(jac_RGL_idx::Dict, full=false)
+    if full
+        fidx = [jac_RGL_idx[:f][:P_G]; jac_RGL_idx[:f][:P_L]; jac_RGL_idx[:f][:Q_RGL]]
+    else
+        fidx = [jac_RGL_idx[:f][:P_G]; jac_RGL_idx[:f][:P_L]; jac_RGL_idx[:f][:Q_L]]
+    end
+    return fidx
+end
+
 # """
 # ## `opfmodeljac_RGL_idx`: get `RGL`-partitioned index sets to extract the following PF equations
 #     - `P_G` and `P_L`
@@ -406,7 +452,8 @@ end
 ### returns:
     - `values::Dict`: dictionary of partitioned values in `OPFModel`'s order
 """
-function PQnet(opfmodel::OPFModel, opfdata::OPFData)
+# function PQnet(opfmodel::OPFModel, opfdata::OPFData)
+function PQnet(opfmodel, opfdata::OPFData)
     nbus = length(opfdata.buses)
     Pd = opfdata.buses.Pd ./ 100.0
     Qd = opfdata.buses.Qd ./ 100.0

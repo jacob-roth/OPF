@@ -1,6 +1,6 @@
 module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
-using SparseArrays
+using SparseArrays, LinearAlgebra
 using MPCCases
 using Printf
 using Pkg
@@ -28,7 +28,12 @@ export om_x_RGL_idx, om_y_RGL_idx, om_pfe_RGL_idx, om_jac_RGL_idx
 export PQnet
 
 include("jacobian.jl")
-export jac_x
+export jac_z_num, jac_z_alg_ew, dStilde_dVtilde, jac_z_alg_vec
+export jac_z
 export dFdy_dFdx_RGL
-# export PF, PFE!, dStilde_dVtilde
+
+include("pfe.jl")
+export PF, PFE_RGL!
+export PF_real, PFE_RGL_real!
+
 end # module

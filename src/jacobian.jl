@@ -8,14 +8,10 @@
     - `dFdx::AbstractArray`: dF/dx
 """
 function dFdy_dFdx_RGL(J::AbstractArray, jac_RGL_idx::Dict, full=false)
-    if full
-        fidx = [jac_RGL_idx[:f][:P_G]; jac_RGL_idx[:f][:P_L]; jac_RGL_idx[:f][:Q_RGL]]
-        yidx = [jac_RGL_idx[:y][:Qg_RG]; jac_RGL_idx[:y][:Vm_L]; jac_RGL_idx[:y][:Va_GL]]
-    else
-        fidx = [jac_RGL_idx[:f][:P_G]; jac_RGL_idx[:f][:P_L]; jac_RGL_idx[:f][:Q_L]]
-        yidx = [jac_RGL_idx[:y][:Vm_L]; jac_RGL_idx[:y][:Va_GL]]
-    end
-    xidx = [jac_RGL_idx[:x][:Pd_RGL]; jac_RGL_idx[:x][:Qd_RGL]]
+    yidx = om_y_RGL_idx(jac_RGL_idx, full)
+    xidx = om_x_RGL_idx(jac_RGL_idx)
+    fidx = om_f_RGL_idx(jac_RGL_idx, full)
+    @assert(length(yidx) == length(fidx))
     dFdy = J[fidx, yidx]
     dFdx = J[fidx, xidx]
     return dFdy, dFdx
@@ -24,7 +20,7 @@ end
 ## -----------------------------------------------------------------------------
 ## numerical
 ## -----------------------------------------------------------------------------
-function jac_x(opfmodel_z::Array{Float64,1}; model::JuMP.NLPEvaluator)
+function jac_z_num(opfmodel_z::Array{Float64,1}; model::JuMP.NLPEvaluator)
     nconstr = MathProgBase.numconstr(model.m)
     nvar = MathProgBase.numvar(model.m)
     J = spzeros(nconstr, nvar)
@@ -35,22 +31,24 @@ end
 ## -----------------------------------------------------------------------------
 ## algebraic (real, entrywise): http://www.pserc.cornell.edu/matpower/docs/ref/matpower5.0/makeJac.html
 ## -----------------------------------------------------------------------------
-function jac_x(opfmodel_z::AbstractArray, data::Dict=Dict(), full=true)
+function jac_z_alg_ew(opfmodel_z::AbstractArray,
+                      Y::AbstractArray,
+                      busIdx::Dict, z_idx::Dict,
+                      genbus::AbstractArray,
+                      matchnumerical=true)
     """ based on: http://schevalier.com/wp-content/uploads/2017/02/Power-Flow-and-Covariance-Matrix.pdf """
-    ## extract
-    Y = data[:Y]
-    G = real.(data[:Y])
-    B = imag.(data[:Y])
-    busIdx = data[:opfdata].BusIdx
-    generators = data[:opfdata].generators
-    z_idx = data[:z_idx]
-    nbus = length(data[:opfdata].buses)
-    ngen = length(data[:opfdata].generators)
-
     ## setup
-    J = zeros(2nbus, 2nbus)
+    #### dimensions
+    ngen = length(z_idx[:Pg]); @assert(ngen == length(z_idx[:Qg]))
+    nbus = length(z_idx[:Vm]); @assert(nbus == length(z_idx[:Va]))
+    @assert(length(opfmodel_z) == 2ngen + 2nbus + 2nbus)
+    #### data
+    G = real.(Y)
+    B = imag.(Y)
     Vm = opfmodel_z[z_idx[:Vm]]
     Va = opfmodel_z[z_idx[:Va]]
+    #### structure
+    J = zeros(2nbus, 2nbus)
 
     ## compute
     for q = 1:nbus # P, Q; equations
@@ -80,8 +78,8 @@ function jac_x(opfmodel_z::AbstractArray, data::Dict=Dict(), full=true)
     Z_bb = spzeros(nbus, nbus)
     Z_bb = spzeros(nbus, nbus)
     I_gen = spzeros(nbus, ngen)
-    for (i,j,v) in zip(generators.bus, collect(1:ngen), ones(ngen))
-    I_gen[i,j] = v
+    for (i,j,v) in zip(genbus, collect(1:ngen), ones(ngen))
+        I_gen[i,j] = v
     end
     Z_bg = spzeros(nbus, ngen)
     dP_dVm = J[1:nbus, 1:nbus]
@@ -89,7 +87,7 @@ function jac_x(opfmodel_z::AbstractArray, data::Dict=Dict(), full=true)
     dQ_dVm = J[(nbus+1):(2nbus), 1:nbus]
     dQ_dVa = J[(nbus+1):(2nbus), (nbus+1):(2nbus)]
 
-    if full == true
+    if matchnumerical == true
         JJ = [ -I_gen    Z_bg    dP_dVm   dP_dVa   I      Z_bb;
                 Z_bg    -I_gen   dQ_dVm   dQ_dVa   Z_bb   I    ]
         return JJ
@@ -106,85 +104,79 @@ end
 ## -----------------------------------------------------------------------------
 ## algebraic (complex, vectorized): http://www.pserc.cornell.edu/matpower/docs/ref/matpower5.0/makeJac.html
 ## -----------------------------------------------------------------------------
-# function PF(xmodel::AbstractArray, Y::AbstractArray, z_idx::Dict)
-#     ## setup
-#     Vm = xmodel[z_idx[:Vm]]
-#     Va = xmodel[z_idx[:Va]]
-#     ngen = length([pars[:Pd_R]; pars[:Pd_G]]); @assert(ngen == length([pars[:Pd_R]; pars[:Qd_G]]))
-#     nbus = length(pars[:Vm_RGL]); @assert(nbus == length(pars[:Va_RGL]))
-#     @assert(length(xmodel) == 2ngen + 2nbus + 2nbus)
-#
-#     # branch admitances
-#     Vtilde = Vm .* exp.(im .* Va)
-#     Itilde = Y*Vtilde
-#     Stilde = Vtilde .* conj.(Itilde)
-#     return Vtilde, Itilde, Stilde
-# end
-# function PF(y::AbstractArray, data::Dict, full=false)
-#     ## setup
-#     Y = data[:Y]
-#     jac_RGL_idx = data[:jac_RGL_idx]
-#     xmodel = data[:xmodel]
-#     ngen = length([pars[:Pd_R]; pars[:Pd_G]]); @assert(ngen == length([pars[:Pd_R]; pars[:Qd_G]]))
-#     nbus = length(pars[:Vm_RGL]); @assert(nbus == length(pars[:Va_RGL]))
-#     @assert(length(xmodel) == 2ngen + 2nbus + 2nbus)
-#
-#     y_idx = idx_y(vars, idx_type)
-#     xmodel[y_idx] = y
-#     return PF(xmodel, Y, idx)
-# end
-# function PFE!(F::AbstractArray, y::AbstractArray, data::Dict)
-#     ## setup
-#     idx = data[:idx]
-#     FF = data[:FF]
-#     @assert(length(F) == length(y))
-#     ngen = length(idx[:Pg]); @assert(ngen == length(idx[:Qg]))
-#     nbus = length(idx[:Vm]); @assert(nbus == length(idx[:Va]))
-#     nload = length(idx[:load])
-#     Vtilde, Itilde, Stilde = PF(y, data)
-#     FF[1:nbus] = real.(Stilde) - data[:Pnet]
-#     FF[(nbus+1):(2nbus)] = imag.(Stilde) - data[:Qnet]
-#     F = FF[idx[:f]]
-#     nothing
-# end
-#
-# function dStilde_dVtilde(Vtilde::AbstractArray, Y::AbstractArray)
-#     Itilde = Y * Vtilde
-#     diagV = spdiagm(0 => Vtilde)
-#     diagVnorm = spdiagm(0 => Vtilde ./ abs.(Vtilde))
-#     diagItilde = spdiagm(0 => Itilde)
-#     dStilde_dVm = diagV * conj.(Y * diagVnorm) + conj.(diagItilde) * diagVnorm;
-#     dStilde_dVa = im * diagV * conj(diagItilde - Y * diagV);
-#     return dStilde_dVm, dStilde_dVa
-# end
-#
-# function jac_x(xmodel::AbstractArray, Y::AbstractArray, x_idx::Dict, matchnumerical=true)
-#     Vm = xmodel[x_idx[:Vm]]
-#     Va = xmodel[x_idx[:Va]]
-#     ngen = length(idx[:Pg]); @assert(ngen == length(idx[:Qg]))
-#     nbus = length(idx[:Vm]); @assert(nbus == length(idx[:Va]))
-#     @assert(length(xmodel) == 2ngen + 2nbus + 2nbus)
-#     Vtilde = Vm .* exp.(im .* Va)
-#
-#     ## jacobian
-#     dStilde_dVm, dStilde_dVa = dStilde_dVtilde(Vtilde, Y)
-#     dPdVa = real.(dStilde_dVa)
-#     dPdVm = real.(dStilde_dVm)
-#     dQdVa = imag(dStilde_dVa)
-#     dQdVm = imag(dStilde_dVm)
-#     Z_bb = spzeros(nbus, nbus)
-#     Z_bb = spzeros(nbus, nbus)
-#     I_gen = spzeros(nbus, ngen)
-#     for (i,j,v) in zip(, collect(1:ngen), ones(ngen))
-#         I_gen[i,j] = v
-#     end
-#     #spdiagm(0 => ones(nbus))[:, 1:ngen]
-#     Z_bg = spzeros(nbus, ngen)
-#     if matchnumerical
-#         return [ -I_gen    Z_bg    dPdVm   dPdVa   I      Z_bb;
-#                   Z_bg    -I_gen   dQdVm   dQdVa   Z_bb   I    ]
-#     else
-#         return [ dPdVa   dPdVm ;
-#                  dQdVa   dQdVm ]
-#     end
-# end
+function dStilde_dVtilde(Vtilde::AbstractArray, Y::AbstractArray)
+    Itilde = Y * Vtilde
+    diagV = spdiagm(0 => Vtilde)
+    diagVnorm = spdiagm(0 => Vtilde ./ abs.(Vtilde))
+    diagItilde = spdiagm(0 => Itilde)
+    dStilde_dVm = diagV * conj.(Y * diagVnorm) + conj.(diagItilde) * diagVnorm;
+    dStilde_dVa = im * diagV * conj(diagItilde - Y * diagV);
+    return dStilde_dVm, dStilde_dVa
+end
+
+function jac_z_alg_vec(opfmodel_z::AbstractArray,
+                       Y::AbstractArray,
+                       z_idx::Dict,
+                       genbus::AbstractArray,
+                       matchnumerical=true)
+    Vm = opfmodel_z[z_idx[:Vm]]
+    Va = opfmodel_z[z_idx[:Va]]
+    ngen = length(z_idx[:Pg]); @assert(ngen == length(z_idx[:Qg]))
+    nbus = length(z_idx[:Vm]); @assert(nbus == length(z_idx[:Va]))
+    @assert(length(opfmodel_z) == 2ngen + 2nbus + 2nbus)
+    Vtilde = Vm .* exp.(im .* Va)
+
+    ## jacobian
+    dStilde_dVm, dStilde_dVa = dStilde_dVtilde(Vtilde, Y)
+    dP_dVa = real.(dStilde_dVa)
+    dP_dVm = real.(dStilde_dVm)
+    dQ_dVa = imag(dStilde_dVa)
+    dQ_dVm = imag(dStilde_dVm)
+    Z_bb = spzeros(nbus, nbus)
+    Z_bb = spzeros(nbus, nbus)
+    I_gen = spzeros(nbus, ngen)
+    for (i,j,v) in zip(genbus, collect(1:ngen), ones(ngen))
+        I_gen[i,j] = v
+    end
+    #spdiagm(0 => ones(nbus))[:, 1:ngen]
+    Z_bg = spzeros(nbus, ngen)
+    if matchnumerical == true
+        return [ -I_gen    Z_bg    dP_dVm   dP_dVa   I      Z_bb;
+                  Z_bg    -I_gen   dQ_dVm   dQ_dVa   Z_bb   I    ]
+    else
+        JJ = Dict()
+        JJ[:dP_dVm] = dP_dVm
+        JJ[:dP_dVa] = dP_dVa
+        JJ[:dQ_dVm] = dQ_dVm
+        JJ[:dQ_dVa] = dQ_dVa
+        return JJ
+    end
+end
+
+## -----------------------------------------------------------------------------
+## wrapper
+## -----------------------------------------------------------------------------
+function jac_z(opfmodel_z::AbstractArray, data::Dict, jac_type::Symbol=:ew, matchnumerical=true)
+    ## extract
+    if jac_type ∈ [:ew, :vec]
+        @assert(haskey(data, :Y))
+        @assert(haskey(data, :opfdata))
+        @assert(haskey(data, :z_idx))
+        Y = data[:Y]
+        busIdx = data[:opfdata].BusIdx
+        genbus = data[:opfdata].generators.bus
+        z_idx = data[:z_idx]
+    elseif jac_type == :num
+        @assert(haskey(data, :model))
+        model = data[:model]
+    end
+
+    ## compute
+    if jac_type == :ew
+        return jac_z_alg_ew(opfmodel_z, Y, busIdx, z_idx, genbus, matchnumerical)
+    elseif jac_type == :vec
+        return jac_z_alg_vec(opfmodel_z, Y, z_idx, genbus, matchnumerical)
+    elseif jac_type == :num
+        return jac_z_num(opfmodel_z, model=model)
+    end
+end
