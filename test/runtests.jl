@@ -3,7 +3,6 @@
 ## -----------------------------------------------------------------------------
 const path = pwd() * "/cases/"
 const case = "case30"
-# const case = "case5"
 const tol = 1e-9
 
 ## -----------------------------------------------------------------------------
@@ -13,64 +12,37 @@ import Pkg
 Pkg.activate(dirname(dirname(dirname(path))))
 Pkg.instantiate()
 using Test
-using MPCCases, Printf
+using MPCCases, Printf, MAT
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra
-using OPF
+using NLsolve
+# using OPF
 include("../src/OPF.jl")
 
 ## -----------------------------------------------------------------------------
 ## load
 ## -----------------------------------------------------------------------------
 opfdata = load_case(case, path, other=false);
+const nbus = length(opfdata.buses)
+const ngen = length(opfdata.generators)
 
 ## -----------------------------------------------------------------------------
-## compare deterministic and "stochastic"
+## tests
 ## -----------------------------------------------------------------------------
-## deterministic acopf
-dm = OPF.acopf_model(opfdata)
-dm = OPF.acopf_solve(dm, opfdata)
-dm_eval = setup(dm.m);
-dxbar = copy(dm_eval.last_x);
-OPF.acopf_outputAll(dm, opfdata)
+include("test_det-sto.jl")           ## compare deterministic and "stochastic"
+include("test_compare.jl")           ## compare with Anirudh's model
+include("test_jacobian.jl")          ## test jacobian calcs (algebraic v numerical)
+include("test_pfe.jl")               ## test power flow equation calcs (vectorized, MatPower, and entrywise)
+# include("test_sensitivities.jl")     ## test Γ sensitivity calcs
 
-## stochastic acopf
+## test sensitivity on case9
+const case = "case9"
+opfdata = load_case(case, path, other=false);
+const nbus = length(opfdata.buses)
+const ngen = length(opfdata.generators)
 sm = OPF.sacopf_model(opfdata)
 sm = OPF.acopf_solve(sm, opfdata)
-sm_eval = setup(sm.m);
-sxbar = copy(sm_eval.last_x);
+sm_eval = setup(sm.m);               ## stochastic model evaluator
+sm_zbar = deepcopy(sm_eval.last_x);  ## stochastc model equilibrium z̄
 OPF.acopf_outputAll(sm, opfdata)
-
-@testset "indexing" begin
-@test norm([ getvalue(dm.m[:Pg]);
-             getvalue(dm.m[:Qg]);
-             getvalue(dm.m[:Vm]);
-             getvalue(dm.m[:Va]) ] - dxbar) <= tol
-@test norm([ getvalue(sm.m[:Pg]);
-             getvalue(sm.m[:Qg]);
-             getvalue(sm.m[:Vm]);
-             getvalue(sm.m[:Va]);
-             getvalue(sm.m[:Pd]);
-             getvalue(sm.m[:Qd]) ] - sxbar) <= tol
-@test norm([ getvalue(getindex(dm.m, :Pg));
-             getvalue(getindex(dm.m, :Qg));
-             getvalue(getindex(dm.m, :Vm));
-             getvalue(getindex(dm.m, :Va)) ] - dxbar) <= tol
-@test norm([ getvalue(getindex(sm.m, :Pg));
-             getvalue(getindex(sm.m, :Qg));
-             getvalue(getindex(sm.m, :Vm));
-             getvalue(getindex(sm.m, :Va));
-             getvalue(getindex(sm.m, :Pd));
-             getvalue(getindex(sm.m, :Qd)) ] - sxbar) <= tol
-end
-
-## -----------------------------------------------------------------------------
-## compare with other model
-## -----------------------------------------------------------------------------
-include("compare.jl")
-
-## -----------------------------------------------------------------------------
-## get sensitivities
-## -----------------------------------------------------------------------------
-dFdy, dFdx = OPF.dFdy_dFdx(sm_eval, sxbar, opfdata)
-dydx = Matrix(dFdy) \ Matrix(dFdx)
+include("test_sensitivities.jl")     ## test Γ sensitivity calcs

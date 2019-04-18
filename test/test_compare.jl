@@ -1,3 +1,4 @@
+if case == "case30"
 @testset "compare with anirudh" begin
 ## Anirudh ccopf: lossless == true 30bus
 # include("acopf.jl")
@@ -103,3 +104,4 @@ dm_zbar = copy(dm_eval.last_x);
 OPF.acopf_outputAll(dm, opfdata)
 @test norm(dm_zbar - z̄) <= tol
 end # testset
+end
