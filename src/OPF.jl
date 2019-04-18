@@ -20,17 +20,15 @@ include("sopfmodel.jl")
 export sacopf_model
 
 include("util.jl")
-export acopf_solve
-export acopf_outputAll
-export acopf_initialPt_IPOPT
-export get_idx_and_id
-export filter_namedtuple
-export nonunique
+export acopf_solve, acopf_initialPt_IPOPT
+export acopf_outputAll, get_values
+export RGL_id, RGL_idx
+export om_z_idx
+export om_x_RGL_idx, om_y_RGL_idx, om_pfe_RGL_idx, om_jac_RGL_idx
+export PQnet
 
 include("jacobian.jl")
 export jac_x
-export PF, dStilde_dV
-export get_idx_sets
-export dFdy_dFdx
-
+export dFdy_dFdx_RGL
+# export PF, PFE!, dStilde_dVtilde
 end # module

@@ -1,3 +1,6 @@
+## -----------------------------------------------------------------------------
+## solve
+## -----------------------------------------------------------------------------
 function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 
   #
@@ -18,6 +21,36 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 end
 function acopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acopf_solve(M.m, opfdata)..., M.kind); end
 
+# Compute initial point for IPOPT based on the values provided in the case data
+function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
+  Pg=zeros(length(opfdata.generators)); Qg=zeros(length(opfdata.generators)); i=1
+  for g in opfdata.generators
+    # set the power levels in in between the bounds as suggested by matpower
+    # (case data also contains initial values in .Pg and .Qg - not used with IPOPT)
+    Pg[i]=0.5*(g.Pmax+g.Pmin)
+    Qg[i]=0.5*(g.Qmax+g.Qmin)
+    i=i+1
+  end
+  @assert i-1==length(opfdata.generators)
+
+  Vm=zeros(length(opfdata.buses)); i=1;
+  for b in opfdata.buses
+    # set the ini val for voltage magnitude in between the bounds
+    # (case data contains initials values in Vm - not used with IPOPT)
+    Vm[i]=0.5*(b.Vmax+b.Vmin);
+    i=i+1
+  end
+  @assert i-1==length(opfdata.buses)
+
+  # set all angles to the angle of the reference bus
+  Va = opfdata.buses[opfdata.bus_ref].Va * ones(length(opfdata.buses))
+
+  return Pg,Qg,Vm,Va
+end
+
+## -----------------------------------------------------------------------------
+## reporting
+## -----------------------------------------------------------------------------
 function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.OPFData)
   #shortcuts for compactness
   lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
@@ -105,41 +138,287 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
 end
 function acopf_outputAll(M::OPFModel, opfdata::OPFData); return acopf_outputAll(M.m, M.kind, opfdata); end
 
-# Compute initial point for IPOPT based on the values provided in the case data
-function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
-  Pg=zeros(length(opfdata.generators)); Qg=zeros(length(opfdata.generators)); i=1
-  for g in opfdata.generators
-    # set the power levels in in between the bounds as suggested by matpower
-    # (case data also contains initial values in .Pg and .Qg - not used with IPOPT)
-    Pg[i]=0.5*(g.Pmax+g.Pmin)
-    Qg[i]=0.5*(g.Qmax+g.Qmin)
-    i=i+1
-  end
-  @assert i-1==length(opfdata.generators)
-
-  Vm=zeros(length(opfdata.buses)); i=1;
-  for b in opfdata.buses
-    # set the ini val for voltage magnitude in between the bounds
-    # (case data contains initials values in Vm - not used with IPOPT)
-    Vm[i]=0.5*(b.Vmax+b.Vmin);
-    i=i+1
-  end
-  @assert i-1==length(opfdata.buses)
-
-  # set all angles to the angle of the reference bus
-  Va = opfdata.buses[opfdata.bus_ref].Va * ones(length(opfdata.buses))
-
-  return Pg,Qg,Vm,Va
+"""
+## `get_values`: get partitioned values of aggregate `OPFModel`'s `z` vector
+### arguments:
+    - `opfmodel::OPFModel`: opf model
+### returns:
+    - `values::Dict`: dictionary of partitioned values in `OPFModel`'s order
+"""
+function get_values(opfmodel::OPFModel)
+  @assert(opfmodel.kind == :S)
+  values = Dict{Symbol, Array{Float64,1}}()
+  values[:Pg] = getvalue(opfmodel.m[:Pg])
+  values[:Qg] = getvalue(opfmodel.m[:Qg])
+  values[:Vm] = getvalue(opfmodel.m[:Vm])
+  values[:Va] = getvalue(opfmodel.m[:Va])
+  values[:Pd] = getvalue(opfmodel.m[:Pd])
+  values[:Qd] = getvalue(opfmodel.m[:Qd])
+  values[:z] = [values[:Pg]; values[:Qg]; values[:Vm]; values[:Va]; values[:Pd]; values[:Qd]]
+  return values
 end
 
-function get_idx_and_id(m::JuMP.Model, k::Symbol, idx_to_id::Dict, offset::Int64)
-  IDX = [linearindex(e) for e in getindex(m, k)]
-  ID = IDX[[idx_to_id[i] for i in eachindex(IDX)]] .- offset
-  return (idx=IDX, id=ID)
+## -----------------------------------------------------------------------------
+## indices
+## -----------------------------------------------------------------------------
+"""
+## `RGL_id`: get ID sets (`bus_i` name sets) for `R`ef, `G`en, and `L`oad buses
+### arguments:
+    - `opfdata::OPFData`: opf data for a particular case
+### returns:
+    - `buses_RGL_id::Dict`: dictionary of IDs for `R`, `G`, `L` sets; apply to vector of size `nbus`
+    - `gens_RGL_id::Dict`: dictionary of IDs for `R`, `G`, sets; apply to vector of size `ngen`
+"""
+function RGL_id(opfdata::OPFData)
+    #### `opfdata.buses` ordering
+    buses_R_id = [opfdata.bus_ref]
+    buses_G_id = filter(x -> x ∉ buses_R_id, opfdata.generators.bus)
+    buses_L_id = filter(x -> x ∉ Set([buses_G_id; buses_R_id]), opfdata.buses.bus_i)  ## purely load buses
+    #### `opfdata.generators` ordering (NOTE: assuming generators' `ID`s are same as index in generator array
+    gens_R_id = findall(opfdata.generators.bus .== opfdata.bus_ref)
+    gens_G_id = findall(opfdata.generators.bus .!= opfdata.bus_ref)
+
+    buses_RGL_id = Dict()
+    buses_RGL_id[:R] = buses_R_id
+    buses_RGL_id[:G] = buses_G_id
+    buses_RGL_id[:L] = buses_L_id
+
+    gens_RG_id = Dict()
+    gens_RG_id[:R] = gens_R_id
+    gens_RG_id[:G] = gens_G_id
+    return buses_RGL_id, gens_RG_id
 end
-function filter_namedtuple(NT::NamedTuple, ids)
-  idmask = findall(x -> x ∈ ids, NT.id)
-  return (idx = NT.idx[idmask], id = NT.id[idmask])
+
+"""
+## `RGL_idx`: get idx sets (index of a bus's `bus_i` ID in `buses`) for `R`ef, `G`en, and `L`oad buses
+### arguments:
+    - `opfdata::OPFData`: opf data for a particular case
+### returns:
+    - `b_RGL_idx::Dict`: dictionary of indices for `R`, `G`, `L` sets; apply to vector of size `nbus`
+    - `g_RG_idx::Dict`: dictionary of indices for `R`, `G` sets; apply to vector of size `ngen`
+"""
+function RGL_idx(buses_RGL_id::Dict, gens_RG_id::Dict, busIdx::Dict)
+    b_RGL_idx = Dict()
+    b_RGL_idx[:R] = [busIdx[x] for x in buses_RGL_id[:R]]
+    b_RGL_idx[:G] = [busIdx[x] for x in buses_RGL_id[:G]]
+    b_RGL_idx[:L] = [busIdx[x] for x in buses_RGL_id[:L]]
+
+    g_RG_idx = Dict()
+    g_RG_idx[:R] = gens_RG_id[:R]
+    g_RG_idx[:G] = gens_RG_id[:G]
+    return b_RGL_idx, g_RG_idx
+end
+function RGL_idx(opfdata::OPFData)
+    buses_RGL, gens_RG = RGL_id(opfdata)
+    return RGL_idx(buses_RGL, gens_RG, opfdata.BusIdx)
+end
+
+"""
+## `om_z_idx`: get index sets to extract the following values
+    - `Pg` and `Qg` in gen-sorted order, i.e., GEN1, GEN2, ... (not BUS sorted order)
+    - `Vm`, `Va`, `Pd`, `Qd` in bus-sorted order, i.e., BUS1, BUS2, ...
+##  from a vector `om_z` ("opfmodel-z") which contains an `OPFModel`'s aggregate variable denoted by `z`
+### arguments:
+    - `opfdata::OPFData`: opf data for a particular case
+### returns:
+    - `z_idx::Dict`: dictionary of index sets for extracting values from `om_z`
+### example:
+```
+julia> z_idx = om_z_idx(opfdata)
+julia> om_z = sm_zbar
+julia> Vm = om_z[z_idx[:Vm]]
+```
+"""
+function om_z_idx(opfdata::OPFData)
+    nbus = length(opfdata.buses)
+    ngen = length(opfdata.generators)
+    Pg_idx_offset = 0; Qg_idx_offset = ngen
+    Vm_idx_offset = 2*ngen; Va_idx_offset = 2*ngen+nbus
+    Pd_idx_offset = 2*ngen+2*nbus; Qd_idx_offset = 2*ngen+3*nbus
+    z_idx = Dict()
+    z_idx[:Pg] = Pg_idx_offset .+ collect(1:ngen)
+    z_idx[:Qg] = Qg_idx_offset .+ collect(1:ngen)
+    z_idx[:Vm] = Vm_idx_offset .+ collect(1:nbus)
+    z_idx[:Va] = Va_idx_offset .+ collect(1:nbus)
+    z_idx[:Pd] = Pd_idx_offset .+ collect(1:nbus)
+    z_idx[:Qd] = Qd_idx_offset .+ collect(1:nbus)
+    return z_idx
+end
+
+"""
+## `om_x_RGL_idx`: get `RGL`-partitioned index sets to extract the following
+    - `x` (parameters): `Pd_{R,G,L}`, `Qd_{R,G,L}`
+##  from a vector `om_z` ("opfmodel-z") which contains an `OPFModel`'s aggregate variable denoted by `z`
+### arguments:
+    - `opfdata::OPFData`: opf data for a particular case
+### returns:
+    - `x_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting values from `om_z`
+"""
+function om_x_RGL_idx(opfdata::OPFData)
+    ngen = length(opfdata.generators); nbus = length(opfdata.buses)
+    busIdx = opfdata.BusIdx
+
+    ## offsets
+    Pg_idx_offset = 0; Qg_idx_offset = ngen
+    Vm_idx_offset = 2*ngen; Va_idx_offset = 2*ngen+nbus
+    Pd_idx_offset = 2*ngen+2*nbus; Qd_idx_offset = 2*ngen+3*nbus
+    bus_idx, gen_idx = RGL_idx(opfdata)
+
+    x_RGL_idx = Dict()
+    ## parameters (`x`)
+    #### Pd^{R ∪ G ∪ L}
+    x_RGL_idx[:Pd_R]   = Pd_idx_offset .+ bus_idx[:R]
+    x_RGL_idx[:Pd_G]   = Pd_idx_offset .+ bus_idx[:G]
+    x_RGL_idx[:Pd_L]   = Pd_idx_offset .+ bus_idx[:L]
+    x_RGL_idx[:Pd_RGL] = [x_RGL_idx[:Pd_R]; x_RGL_idx[:Pd_G]; x_RGL_idx[:Pd_L]]
+    ####  Qd^{R ∪ G ∪ L}
+    x_RGL_idx[:Qd_R]   = Qd_idx_offset .+ bus_idx[:R]
+    x_RGL_idx[:Qd_G]   = Qd_idx_offset .+ bus_idx[:G]
+    x_RGL_idx[:Qd_L]   = Qd_idx_offset .+ bus_idx[:L]
+    x_RGL_idx[:Qd_RGL] = [x_RGL_idx[:Qd_R]; x_RGL_idx[:Qd_G]; x_RGL_idx[:Qd_L]]
+    #### Vm^{R ∪ G}
+    x_RGL_idx[:Vm_R]   = Vm_idx_offset .+ bus_idx[:R]
+    x_RGL_idx[:Vm_G]   = Vm_idx_offset .+ bus_idx[:G]
+    #### Va^{R}
+    x_RGL_idx[:Va_R]   = Va_idx_offset .+ bus_idx[:R]
+    return x_RGL_idx
+end
+
+"""
+## `om_y_RGL_idx`: get `RGL`-partitioned index sets to extract the following
+    - `y` (variables): `Qg_{R,G}`, `Vm_L`, `Va_{G,L}`
+##  from a vector `om_z` ("opfmodel-z") which contains an `OPFModel`'s aggregate variable denoted by `z`
+### arguments:
+    - `opfdata::OPFData`: opf data for a particular case
+### returns:
+    - `y_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting values from `om_z`
+"""
+function om_y_RGL_idx(opfdata::OPFData)
+    ngen = length(opfdata.generators); nbus = length(opfdata.buses)
+    busIdx = opfdata.BusIdx
+
+    ## offsets
+    Pg_idx_offset = 0; Qg_idx_offset = ngen
+    Vm_idx_offset = 2*ngen; Va_idx_offset = 2*ngen+nbus
+    Pd_idx_offset = 2*ngen+2*nbus; Qd_idx_offset = 2*ngen+3*nbus
+    bus_idx, gen_idx = RGL_idx(opfdata)
+
+    y_RGL_idx = Dict()
+    ## variables (`y`)
+    #### Qg^{R ∪ G}
+    y_RGL_idx[:Qg_R]   = Qg_idx_offset .+ gen_idx[:R]
+    y_RGL_idx[:Qg_G]   = Qg_idx_offset .+ gen_idx[:G]
+    y_RGL_idx[:Qg_RG]  = [y_RGL_idx[:Qg_R]; y_RGL_idx[:Qg_G]]
+    #### Vm^L
+    y_RGL_idx[:Vm_L]   = Vm_idx_offset .+ bus_idx[:L]
+    #### Va^{G ∪ L}
+    y_RGL_idx[:Va_G]   = Va_idx_offset .+ bus_idx[:G]
+    y_RGL_idx[:Va_L]   = Va_idx_offset .+ bus_idx[:L]
+    y_RGL_idx[:Va_GL]  = [y_RGL_idx[:Va_G]; y_RGL_idx[:Va_L]]
+    return y_RGL_idx
+end
+
+"""
+## `om_pfe_RGL_idx`: get `RGL`-partitioned index sets to extract the following PF equations
+    - `f`: `P_G` and `P_L`; `Q_R`, `Q_G`, and `Q_L`
+##  from an object of dimension `2nbus`
+### arguments:
+    - `opfdata::OPFData`: opf data for a particular case
+### returns:
+    - `pfe_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting PF equations
+"""
+function om_pfe_RGL_idx(opfdata::OPFData)
+    ngen = length(opfdata.generators); nbus = length(opfdata.buses)
+    busIdx = opfdata.BusIdx
+
+    ## offsets
+    Pg_idx_offset = 0; Qg_idx_offset = ngen
+    Vm_idx_offset = 2*ngen; Va_idx_offset = 2*ngen+nbus
+    Pd_idx_offset = 2*ngen+2*nbus; Qd_idx_offset = 2*ngen+3*nbus
+    bus_idx, gen_idx = RGL_idx(opfdata)
+
+    pfe_RGL_idx = Dict()
+    ## equations (`f`)
+    #### Pnet^{R ∪ G ∪ L}
+    pfe_RGL_idx[:P_G] = bus_idx[:G]
+    pfe_RGL_idx[:P_L] = bus_idx[:L]
+    pfe_RGL_idx[:P_GL] = [pfe_RGL_idx[:P_G]; pfe_RGL_idx[:P_L]]
+    #### Qnet^{R ∪ G ∪ L}
+    pfe_RGL_idx[:Q_R] = nbus .+ bus_idx[:R]
+    pfe_RGL_idx[:Q_G] = nbus .+ bus_idx[:G]
+    pfe_RGL_idx[:Q_L] = nbus .+ bus_idx[:L]
+    pfe_RGL_idx[:Q_RGL] = [pfe_RGL_idx[:Q_R]; pfe_RGL_idx[:Q_G]; pfe_RGL_idx[:Q_L]]
+    return pfe_RGL_idx
+end
+
+"""
+## `om_jac_RGL_idx`: get `RGL`-partitioned index sets to extract `x`, `y`, and `pfe` indices
+### arguments:
+    - `opfdata::OPFData`: opf data for a particular case
+### returns:
+    - `jac_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting PF equations
+"""
+function om_jac_RGL_idx(opfdata::OPFData)
+    jac_RGL_idx = Dict()
+    jac_RGL_idx[:x] = om_x_RGL_idx(opfdata)
+    jac_RGL_idx[:y] = om_y_RGL_idx(opfdata)
+    jac_RGL_idx[:f] = om_pfe_RGL_idx(opfdata)
+    return jac_RGL_idx
+end
+
+# """
+# ## `opfmodeljac_RGL_idx`: get `RGL`-partitioned index sets to extract the following PF equations
+#     - `P_G` and `P_L`
+#     - `Q_R`, `Q_G`, and `Q_L`
+# ##  from an object of dimension `2nbus`
+# ### arguments:
+#     - `opfdata::OPFData`: opf data for a particular case
+# ### returns:
+#     - `ome_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting PF equations
+# """
+# function opfmodeljac_RGL_idx(opfdata::OPFData)
+#
+# function jac_idx_y(vars::Dict, full::Bool=true)
+#     if full == true
+#         return [vars[:Qg_RG]; vars[:Vm_L]; vars[:Va_GL]]
+#     else
+#         return [vars[:Vm_L]; vars[:Va_GL]]
+#     end
+# end
+# function jac_idx_x(pars::Dict)
+#     return [pars[:Pd_RGL]; pars[:Qd_RGL]]
+# end
+# function jac_idx_f(eqns::Dict, full::Bool=true)
+#     if full == true
+#         return [eqns[:P_GL]; eqns[:Q_RGL]]
+#     else
+#         return [eqns[:P_GL]; eqns[:Q_L]]
+#     end
+# end
+
+## -----------------------------------------------------------------------------
+## helpers
+## -----------------------------------------------------------------------------
+"""
+## `PQnet`: compute `Pg - Pd` net injections at each bus
+### arguments:
+    - `opfmodel::OPFModel`: opf model
+### returns:
+    - `values::Dict`: dictionary of partitioned values in `OPFModel`'s order
+"""
+function PQnet(opfmodel::OPFModel, opfdata::OPFData)
+    nbus = length(opfdata.buses)
+    Pd = opfdata.buses.Pd ./ 100.0
+    Qd = opfdata.buses.Qd ./ 100.0
+    Pg = zeros(nbus)
+    Qg = zeros(nbus)
+    Pg[opfdata.generators.bus] = opfdata.generators.Pg
+    Qg[opfdata.generators.bus] = opfdata.generators.Qg
+    Pg[opfdata.generators.bus] = getvalue(opfmodel.m[:Pg])
+    Qg[opfdata.generators.bus] = getvalue(opfmodel.m[:Qg])
+    Pnet = Pg - Pd
+    Qnet = Qg - Qd
+    return Pnet, Qnet
 end
 
 function nonunique(x::AbstractArray{T}) where T

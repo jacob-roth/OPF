@@ -23,6 +23,8 @@ using OPF
 ## load
 ## -----------------------------------------------------------------------------
 opfdata = load_case(case, path, other=false);
+const nbus = length(opfdata.buses)
+const ngen = length(opfdata.generators)
 
 ## -----------------------------------------------------------------------------
 ## compare deterministic and "stochastic"
@@ -30,39 +32,39 @@ opfdata = load_case(case, path, other=false);
 ## deterministic acopf
 dm = OPF.acopf_model(opfdata)
 dm = OPF.acopf_solve(dm, opfdata)
-dm_eval = setup(dm.m);
-dxbar = deepcopy(dm_eval.last_x);
+dm_eval = setup(dm.m);               ## deterministic model evaluator
+dm_zbar = deepcopy(dm_eval.last_x);  ## deterministic model equilibrium z̄
 OPF.acopf_outputAll(dm, opfdata)
 
 ## stochastic acopf
 sm = OPF.sacopf_model(opfdata)
 sm = OPF.acopf_solve(sm, opfdata)
-sm_eval = setup(sm.m);
-sxbar = deepcopy(sm_eval.last_x);
+sm_eval = setup(sm.m);               ## stochastic model evaluator
+sm_zbar = deepcopy(sm_eval.last_x);  ## stochastc model equilibrium z̄
 OPF.acopf_outputAll(sm, opfdata)
 
 @testset "indexing" begin
 @test norm([ getvalue(dm.m[:Pg]);
              getvalue(dm.m[:Qg]);
              getvalue(dm.m[:Vm]);
-             getvalue(dm.m[:Va]) ] - dxbar) <= tol
+             getvalue(dm.m[:Va]) ] - dm_zbar) <= tol
 @test norm([ getvalue(sm.m[:Pg]);
              getvalue(sm.m[:Qg]);
              getvalue(sm.m[:Vm]);
              getvalue(sm.m[:Va]);
              getvalue(sm.m[:Pd]);
-             getvalue(sm.m[:Qd]) ] - sxbar) <= tol
+             getvalue(sm.m[:Qd]) ] - sm_zbar) <= tol
 @test norm([ getvalue(getindex(dm.m, :Pg));
              getvalue(getindex(dm.m, :Qg));
              getvalue(getindex(dm.m, :Vm));
-             getvalue(getindex(dm.m, :Va)) ] - dxbar) <= tol
+             getvalue(getindex(dm.m, :Va)) ] - dm_zbar) <= tol
 @test norm([ getvalue(getindex(sm.m, :Pg));
              getvalue(getindex(sm.m, :Qg));
              getvalue(getindex(sm.m, :Vm));
              getvalue(getindex(sm.m, :Va));
              getvalue(getindex(sm.m, :Pd));
-             getvalue(getindex(sm.m, :Qd)) ] - sxbar) <= tol
-end
+             getvalue(getindex(sm.m, :Qd)) ] - sm_zbar) <= tol
+end # testset
 
 ## -----------------------------------------------------------------------------
 ## compare with other model
@@ -72,34 +74,48 @@ include("compare.jl")
 ## -----------------------------------------------------------------------------
 ## get Jacobian
 ## -----------------------------------------------------------------------------
-## setup
+## test numerical and algebraic
+include("../src/OPF.jl")
+@testset "jacobian" begin
 Y = computeAdmittanceMatrix(opfdata)
-idx_full = get_idx_sets(opfdata, full=true)
-idx_red = get_idx_sets(opfdata, full=false)
-@testset "get Jacobian" begin
-for idx in [idx_full, idx_red]
-## numerical
-J_numerical = jac_x(sxbar, model=sm_eval)
-J_numerical = J_numerical[idx[:f], :]
+G = real.(Y)
+B = imag.(Y)
+J_RGL_idx = OPF.om_jac_RGL_idx(opfdata)
+z_idx = OPF.om_z_idx(opfdata)
+#### numerical
+J_num = OPF.jac_x(sm_zbar, model=sm_eval)[1:(2nbus), :]
+#### algebraic
+data = Dict()
+data[:Y]       = Y
+data[:opfdata] = opfdata
+data[:z_idx]   = z_idx
+J_alg = jac_x(sm_zbar, data)
+#### test
+@test norm(J_num - J_alg) <= tol
 
-## algebraic (compare to MatPower)
-Vtilde, Itilde, Stilde = PF(sxbar, Y, idx)
-SVm, SVa = dStilde_dV(Vtilde, Y)
-SVa_ = matread("cases/SVa.mat")
-SVm_ = matread("cases/SVm.mat")
-@test norm(SVm - SVm_["SVm"]) <= tol
-@test norm(SVa - SVa_["SVa"]) <= tol
-J_algebraic = jac_x(sxbar, Y, idx)
-J_algebraic = J_algebraic[idx[:f], :]
-
-## test
-@test norm(J_algebraic - J_numerical) <= tol
-end
-end # testset
+# ## vectorized algebraic (compare to MatPower)
+# Vtilde, Itilde, Stilde = PF(sxbar, Y, idx)
+# dS_dVm, dS_dVa = dStilde_dV(Vtilde, Y)
+# dS_dVa_ = matread("cases/SVa.mat")
+# dS_dVm_ = matread("cases/SVm.mat")
+# @test norm(dS_dVm - dS_dVm_["SVm"]) <= tol
+# @test norm(dS_dVa - dS_dVa_["SVa"]) <= tol
+# J_algebraic = jac_x(sxbar, Y, idx)
+# J_algebraic = J_algebraic[idx[:f], :]
+# @test norm(J_algebraic - J_numerical) <= tol
+end # jacobian testset
 
 ## -----------------------------------------------------------------------------
-## get sensitivities
+## test sensitivities
 ## -----------------------------------------------------------------------------
+dFdy, dFdx = OPF.dFdy_dFdx_RGL(J_alg, J_RGL_idx)
+Γ = Matrix(dFdy) \ Matrix(dFdx)
+
+
+
+
+
+
 @testset "consistency between algebraic/numerical"
 for idx in [idx_full, idx_red]
 dFdy_n, dFdx_n = dFdy_dFdx(sxbar, idx, model=sm_eval)

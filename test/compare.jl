@@ -93,13 +93,13 @@ V̄a = [
 0.0053933283888301115
 -0.009492659543092126
 ]
-x̄ = [P̄g; Q̄g; V̄m; V̄a]
+z̄ = [P̄g; Q̄g; V̄m; V̄a]
 options = Dict()
 options[:lossless] = true
 dm = OPF.acopf_model(opfdata, options)
 dm = OPF.acopf_solve(dm, opfdata)
 dm_eval = setup(dm.m);
-dxbar = copy(dm_eval.last_x);
+dm_zbar = copy(dm_eval.last_x);
 OPF.acopf_outputAll(dm, opfdata)
-@test norm(dxbar - x̄) <= tol
+@test norm(dm_zbar - z̄) <= tol
 end # testset
