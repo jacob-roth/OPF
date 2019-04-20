@@ -24,7 +24,7 @@ export acopf_solve, acopf_initialPt_IPOPT
 export acopf_outputAll, get_values
 export RGL_id, RGL_idx
 export om_z_idx
-export om_x_RGL_idx, om_y_RGL_idx, om_pfe_RGL_idx, om_jac_RGL_idx
+export om_x_RGL_idx, om_y_RGL_idx, om_f_RGL_idx, om_pfe_RGL_idx, om_jac_RGL_idx
 export PQnet
 
 include("jacobian.jl")

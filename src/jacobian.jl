@@ -48,31 +48,34 @@ function jac_z_alg_ew(opfmodel_z::AbstractArray,
     Vm = opfmodel_z[z_idx[:Vm]]
     Va = opfmodel_z[z_idx[:Va]]
     #### structure
-    J = zeros(2nbus, 2nbus)
+    dP_dVm = zeros(nbus, nbus)
+    dP_dVa = zeros(nbus, nbus)
+    dQ_dVm = zeros(nbus, nbus)
+    dQ_dVa = zeros(nbus, nbus)
 
     ## compute
-    for q = 1:nbus # P, Q; equations
-        for b = 1:nbus # Vm, Va; buses
-            h = busIdx[mod1(b, nbus)]
-            k = busIdx[mod1(q, nbus)]
-            if h == k
-                IDX = [busIdx[x] for x in Y[h,:].nzind]
-                P = Vm[h] * sum(Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) ) for kk in IDX)
-                Q = Vm[h] * sum(Vm[kk] * ( G[h,kk] * sin(Va[h]-Va[kk]) - B[h,kk] * cos(Va[h]-Va[kk]) ) for kk in IDX)
-                dP_dVa = -Q       - B[h,h] * Vm[h]^2
-                dP_dVm =  P/Vm[h] + G[h,h] * Vm[h]
-                dQ_dVa =  P       - G[h,h] * Vm[h]^2
-                dQ_dVm =  Q/Vm[h] - B[h,h] * Vm[h]
+    for i = 1:nbus # P, Q; equations
+        for k = 1:nbus # Vm, Va; buses
+            i = busIdx[mod1(i, nbus)]
+            k = busIdx[mod1(k, nbus)]
+            if i == k
+                IDX = [busIdx[x] for x in Y[i,:].nzind]
+                P = Vm[i] * sum(Vm[kk] * ( G[i,kk] * cos(Va[i]-Va[kk]) + B[i,kk] * sin(Va[i]-Va[kk]) ) for kk in IDX)
+                Q = Vm[i] * sum(Vm[kk] * ( G[i,kk] * sin(Va[i]-Va[kk]) - B[i,kk] * cos(Va[i]-Va[kk]) ) for kk in IDX)
+                dP_dVa_ik = -Q       - B[i,i] * Vm[i]^2
+                dP_dVm_ik =  P/Vm[i] + G[i,i] * Vm[i]
+                dQ_dVa_ik =  P       - G[i,i] * Vm[i]^2
+                dQ_dVm_ik =  Q/Vm[i] - B[i,i] * Vm[i]
             else
-                dP_dVa =  Vm[h] * Vm[k] * ( G[h,k] * sin(Va[h]-Va[k]) - B[h,k] * cos(Va[h]-Va[k]) )
-                dP_dVm =  Vm[h]         * ( G[h,k] * cos(Va[h]-Va[k]) + B[h,k] * sin(Va[h]-Va[k]) )
-                dQ_dVa = -Vm[h] * Vm[k] * ( G[h,k] * cos(Va[h]-Va[k]) + B[h,k] * sin(Va[h]-Va[k]) )
-                dQ_dVm =  Vm[h]         * ( G[h,k] * sin(Va[h]-Va[k]) - B[h,k] * cos(Va[h]-Va[k]) )
+                dP_dVa_ik =  Vm[i] * Vm[k] * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) )
+                dP_dVm_ik =  Vm[i]         * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) )
+                dQ_dVa_ik = -Vm[i] * Vm[k] * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) )
+                dQ_dVm_ik =  Vm[i]         * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) )
             end
-            J[b, q]           = dP_dVm
-            J[b, nbus+q]      = dP_dVa
-            J[nbus+b, q]      = dQ_dVm
-            J[nbus+b, nbus+q] = dQ_dVa
+            dP_dVa[i, k] = dP_dVa_ik
+            dP_dVm[i, k] = dP_dVm_ik
+            dQ_dVa[i, k] = dQ_dVa_ik
+            dQ_dVm[i, k] = dQ_dVm_ik
         end
     end
     Z_bb = spzeros(nbus, nbus)
@@ -82,10 +85,6 @@ function jac_z_alg_ew(opfmodel_z::AbstractArray,
         I_gen[i,j] = v
     end
     Z_bg = spzeros(nbus, ngen)
-    dP_dVm = J[1:nbus, 1:nbus]
-    dP_dVa = J[1:nbus, (nbus+1):(2nbus)]
-    dQ_dVm = J[(nbus+1):(2nbus), 1:nbus]
-    dQ_dVa = J[(nbus+1):(2nbus), (nbus+1):(2nbus)]
 
     if matchnumerical == true
         JJ = [ -I_gen    Z_bg    dP_dVm   dP_dVa   I      Z_bb;
