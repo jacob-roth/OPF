@@ -31,3 +31,12 @@ Vtilde_, Itilde_, Stilde_ = PF(sxbar, Y, idx)
 @test norm(imag.(Itilde_[bus_RGL]) - Itilde.I) <= tol; @test norm(imag.(Itilde_) - Itilde.I[bus_RGL_inv]) <= tol
 @test norm(real.(Stilde_[bus_RGL]) - Stilde.R) <= tol; @test norm(real.(Stilde_) - Stilde.R[bus_RGL_inv]) <= tol
 @test norm(imag.(Stilde_[bus_RGL]) - Stilde.I) <= tol; @test norm(imag.(Stilde_) - Stilde.I[bus_RGL_inv]) <= tol
+
+Gamma = [1 2 3;
+         4 5 6]
+Sigma = [10  20  30 ; 40  50  60 ; 70  80  90]
+Gamma * Sigma * Gamma'
+Gamma[:,2]'*Gamma[:,2]*Sigma[2,2]
+Gamma[:,1]'*Gamma[:,1]*Sigma[1,1]
+Gamma[2,:]'*Gamma[2,:]*Sigma[2,2]
+Gamma[1,:]'*Gamma[1,:]*Sigma[1,1]

@@ -1,9 +1,12 @@
 function ccacopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
   # parse options
-  lossless = haskey(options, :lossless) ? options[:lossless] : false
+  lossless       = haskey(options, :lossless)       ? options[:lossless]       : false
   current_rating = haskey(options, :current_rating) ? options[:current_rating] : false
-  epsilon = haskey(options, :epsilon) ? options[:epsilon] : 0.05
-  full = haskey(options, :full) ? options[:full] : false
+  epsilon_Vm     = haskey(options, :epsilon_Vm)     ? options[:epsilon_Vm]     : 0.05
+  epsilon_Va     = haskey(options, :epsilon_Va)     ? options[:epsilon_Va]     : 0.05
+  epsilon_Qg     = haskey(options, :epsilon_Qg)     ? options[:epsilon_Qg]     : 0.05
+  γ              = haskey(options, :gamma)          ? options[:gamma]          : 1.0
+  print_level    = haskey(options, :print_level)    ? options[:print_level]    : 0
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -11,7 +14,7 @@ function ccacopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
 
   # shortcuts for compactness
   lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
-  busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
+  BusIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
   nbus = length(buses); nline = length(lines); ngen = length(generators); nload = length(findall(buses.bustype .== 1))
   # @assert(nload + ngen == nbus); NOT assert bc some buses can have more than one generator...
 
@@ -21,17 +24,11 @@ function ccacopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
   G = real.(Y); g_row, g_col, g_val = findnz(G)
   B = imag.(Y); b_row, b_col, b_val = findnz(B)
 
-  # index sets
-  z_idx = om_z_idx(opfdata)
-  J_RGL_idx = om_jac_RGL_idx(opfdata)
-  x_RGL_idx = om_x_RGL_idx(J_RGL_idx);       nx = length(x_RGL_idx)
-  y_RGL_idx = om_y_RGL_idx(J_RGL_idx, full); ny = length(y_RGL_idx)
-  f_RGL_idx = om_f_RGL_idx(J_RGL_idx, full); nf = length(f_RGL_idx)
-  b_RGL_idx, g_RGL_idx = RGL_idx(opfdata)
-  @assert(ny == nf)
-
   # parse data
-  Σ = haskey(data, :Sigma) ? data[:Sigma] : Matrix(Diagonal(ones(nx)))
+  Σ_d    = haskey(data, :Sigma_d) ? data[:Sigma_d] : Matrix(Diagonal(ones(2nbus)))
+  Va_min = haskey(data, :Va_min)  ? data[:Va_min]  : -pi * ones(nbus)
+  Va_max = haskey(data, :Va_max)  ? data[:Va_max]  :  pi * ones(nbus)
+  z = Normal(0,1)
 
   #
   # model
@@ -39,20 +36,43 @@ function ccacopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")
     opfmodel = Model(with_optimizer(Ipopt.Optimizer))
   else
-    opfmodel = Model(solver=IpoptSolver(print_level=0))
+    opfmodel = Model(solver=IpoptSolver(print_level=print_level))
   end
 
-  @variable(opfmodel, generators[i].Pmin <= Pg[i=1:ngen] <= generators[i].Pmax)
-  @variable(opfmodel, generators[i].Qmin <= Qg[i=1:ngen] <= generators[i].Qmax)
-  @variable(opfmodel, buses[i].Vmin <= Vm[i=1:nbus] <= buses[i].Vmax)
-  @variable(opfmodel, -pi <= Va[1:nbus] <= pi)
-
+  #
+  # variables
+  #
+  ## all variables
+  @variable(opfmodel, generators[i].Pmin  <= Pg[i=1:ngen] <= generators[i].Pmax)
+  @variable(opfmodel, generators[i].Qmin  <= Qg[i=1:ngen] <= generators[i].Qmax)
+  @variable(opfmodel, buses[i].Vmin       <= Vm[i=1:nbus] <= buses[i].Vmax)
+  @variable(opfmodel, Va_min[i]           <= Va[i=1:nbus] <= Va_max[i])
   @variable(opfmodel, buses[i].Pd/baseMVA <= Pd[i=1:nbus] <= buses[i].Pd/baseMVA)
   @variable(opfmodel, buses[i].Qd/baseMVA <= Qd[i=1:nbus] <= buses[i].Qd/baseMVA)
+  ## partition variables
+  b_RGL_idx, g_RGL_idx = RGL_idx(opfdata)
+  #### unknown
+  x = [Vm[b_RGL_idx[:L]]; Va[b_RGL_idx[:G]]; Va[b_RGL_idx[:L]]; Qg[g_RGL_idx[:G]]];
+  #### control
+  u = [Pg[g_RGL_idx[:G]]; Vm[b_RGL_idx[:G]]; Vm[b_RGL_idx[:R]]];
+  #### parameter
+  p = Va[b_RGL_idx[:R]];
+  #### uncertainty
+  d = [Pd; Qd];
+  #### aggregate "known"
+  y = [u; p; d];
+  #### dims
+  nx = length(x); nu = length(u); np = length(p); nd = length(d); ny = length(y)
+  xidx = [xx.col for xx in x]  ## index in model `z`
+  uidx = [xx.col for xx in u]  ## index in model `z`
+  pidx = [xx.col for xx in p]  ## index in model `z`
+  didx = [xx.col for xx in d]  ## index in model `z`
+  yidx = [xx.col for xx in y]  ## index in model `z`
+  Fidx = [b_RGL_idx[:L]; b_RGL_idx[:G]; nbus .+ b_RGL_idx[:L]; nbus .+ b_RGL_idx[:G]]  ## index in 2nbus equations
 
   ## CC variables
   @variable(opfmodel, Gamma[i=1:nx, j=1:ny])
-  # @variable(opfmodel, zeta[i=1:nx, j=1:ny])
+  @variable(opfmodel, zeta[i=1:nx, j=1:ny])
 
   #fix the voltage angle at the reference bus
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")
@@ -63,8 +83,9 @@ function ccacopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
   end
 
   @NLobjective(opfmodel, Min, sum( generators[i].coeff[generators[i].n-2]*(baseMVA*Pg[i])^2
-			             +generators[i].coeff[generators[i].n-1]*(baseMVA*Pg[i])
-				     +generators[i].coeff[generators[i].n  ] for i=1:ngen))
+			                            +generators[i].coeff[generators[i].n-1]*(baseMVA*Pg[i])
+				                          +generators[i].coeff[generators[i].n  ] for i=1:ngen)
+                            + sum(zeta[i,j]^2 for i=1:nx for j=1:ny))
 
   #
   # power flow balance
@@ -72,16 +93,16 @@ function ccacopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
   #real part
   @NLconstraint(opfmodel, P[b=1:nbus],
     ( sum( YffR[l] for l in FromLines[b]) + sum( YttR[l] for l in ToLines[b]) + YshR[b] ) * Vm[b]^2
-    + sum( Vm[b]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[b]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[b]-Va[busIdx[lines[l].to]]  )) for l in FromLines[b] )
-    + sum( Vm[b]*Vm[busIdx[lines[l].from]]*( YtfR[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfI[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]   )
-    - ( sum(baseMVA*Pg[g] for g in BusGeners[b]) - sum(baseMVA*Pd[l] for l in busIdx[b]) ) / baseMVA      # Sbus part
+    + sum( Vm[b]*Vm[BusIdx[lines[l].to]]  *( YftR[l]*cos(Va[b]-Va[BusIdx[lines[l].to]]  ) + YftI[l]*sin(Va[b]-Va[BusIdx[lines[l].to]]  )) for l in FromLines[b] )
+    + sum( Vm[b]*Vm[BusIdx[lines[l].from]]*( YtfR[l]*cos(Va[b]-Va[BusIdx[lines[l].from]]) + YtfI[l]*sin(Va[b]-Va[BusIdx[lines[l].from]])) for l in ToLines[b]   )
+    - ( sum(baseMVA*Pg[g] for g in BusGeners[b]) - sum(baseMVA*Pd[l] for l in BusIdx[b]) ) / baseMVA      # Sbus part
     ==0)
   #imaginary part
   @NLconstraint(opfmodel, Q[b=1:nbus],
     ( sum(-YffI[l] for l in FromLines[b]) + sum(-YttI[l] for l in ToLines[b]) - YshI[b] ) * Vm[b]^2
-    + sum( Vm[b]*Vm[busIdx[lines[l].to]]  *(-YftI[l]*cos(Va[b]-Va[busIdx[lines[l].to]]  ) + YftR[l]*sin(Va[b]-Va[busIdx[lines[l].to]]  )) for l in FromLines[b] )
-    + sum( Vm[b]*Vm[busIdx[lines[l].from]]*(-YtfI[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfR[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]   )
-    - ( sum(baseMVA*Qg[g] for g in BusGeners[b]) - sum(baseMVA*Qd[l] for l in busIdx[b]) ) / baseMVA      #Sbus part
+    + sum( Vm[b]*Vm[BusIdx[lines[l].to]]  *(-YftI[l]*cos(Va[b]-Va[BusIdx[lines[l].to]]  ) + YftR[l]*sin(Va[b]-Va[BusIdx[lines[l].to]]  )) for l in FromLines[b] )
+    + sum( Vm[b]*Vm[BusIdx[lines[l].from]]*(-YtfI[l]*cos(Va[b]-Va[BusIdx[lines[l].from]]) + YtfR[l]*sin(Va[b]-Va[BusIdx[lines[l].from]])) for l in ToLines[b]   )
+    - ( sum(baseMVA*Qg[g] for g in BusGeners[b]) - sum(baseMVA*Qd[l] for l in BusIdx[b]) ) / baseMVA      # Sbus part
     ==0)
   #
   # branch/lines flow limits
@@ -100,15 +121,15 @@ function ccacopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
       if current_rating == true
         F_fr[l] = @NLconstraint(opfmodel,
   	              1.0 *
-                	( Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
-                	  + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+                	( Yff_abs2*Vm[BusIdx[lines[l].from]]^2 + Yft_abs2*Vm[BusIdx[lines[l].to]]^2
+                	  + 2*Vm[BusIdx[lines[l].from]]*Vm[BusIdx[lines[l].to]]*(Yre*cos(Va[BusIdx[lines[l].from]]-Va[BusIdx[lines[l].to]])-Yim*sin(Va[BusIdx[lines[l].from]]-Va[BusIdx[lines[l].to]]))
                 	)
                   - flowmax <=0)
       else
       F_fr[l] = @NLconstraint(opfmodel,
-	              Vm[busIdx[lines[l].from]]^2 *
-              	( Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
-              	  + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+	              Vm[BusIdx[lines[l].from]]^2 *
+              	( Yff_abs2*Vm[BusIdx[lines[l].from]]^2 + Yft_abs2*Vm[BusIdx[lines[l].to]]^2
+              	  + 2*Vm[BusIdx[lines[l].from]]*Vm[BusIdx[lines[l].to]]*(Yre*cos(Va[BusIdx[lines[l].from]]-Va[BusIdx[lines[l].to]])-Yim*sin(Va[BusIdx[lines[l].from]]-Va[BusIdx[lines[l].to]]))
               	)
                 - flowmax <=0)
       end
@@ -118,15 +139,15 @@ function ccacopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
       if current_rating == true
         F_to[l] = @NLconstraint(opfmodel,
           	      1.0 *
-                  ( Ytf_abs2*Vm[busIdx[lines[l].from]]^2 + Ytt_abs2*Vm[busIdx[lines[l].to]]^2
-                    + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+                  ( Ytf_abs2*Vm[BusIdx[lines[l].from]]^2 + Ytt_abs2*Vm[BusIdx[lines[l].to]]^2
+                    + 2*Vm[BusIdx[lines[l].from]]*Vm[BusIdx[lines[l].to]]*(Yre*cos(Va[BusIdx[lines[l].from]]-Va[BusIdx[lines[l].to]])-Yim*sin(Va[BusIdx[lines[l].from]]-Va[BusIdx[lines[l].to]]))
                   )
                   - flowmax <=0)
       else
         F_to[l] = @NLconstraint(opfmodel,
-          	      Vm[busIdx[lines[l].to]]^2 *
-                  ( Ytf_abs2*Vm[busIdx[lines[l].from]]^2 + Ytt_abs2*Vm[busIdx[lines[l].to]]^2
-                    + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+          	      Vm[BusIdx[lines[l].to]]^2 *
+                  ( Ytf_abs2*Vm[BusIdx[lines[l].from]]^2 + Ytt_abs2*Vm[BusIdx[lines[l].to]]^2
+                    + 2*Vm[BusIdx[lines[l].from]]*Vm[BusIdx[lines[l].to]]*(Yre*cos(Va[BusIdx[lines[l].from]]-Va[BusIdx[lines[l].to]])-Yim*sin(Va[BusIdx[lines[l].from]]-Va[BusIdx[lines[l].to]]))
                   )
                   - flowmax <=0)
       end
@@ -139,178 +160,90 @@ function ccacopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
   # jacobian: http://schevalier.com/wp-content/uploads/2017/02/Power-Flow-and-Covariance-Matrix.pdf
   #
   #### components
-  dP_dVm = Array{JuMP.NonlinearExpression,2}(undef, nbus, nbus)
-  dP_dVa = Array{JuMP.NonlinearExpression,2}(undef, nbus, nbus)
-  dQ_dVm = Array{JuMP.NonlinearExpression,2}(undef, nbus, nbus)
-  dQ_dVa = Array{JuMP.NonlinearExpression,2}(undef, nbus, nbus)
+  dP_dPg = zeros(nbus, ngen); dP_dQg = zeros(nbus, ngen)
+  dP_dVm = Array{Union{Float64,JuMP.NonlinearExpression},2}(undef, nbus, nbus)
+  dP_dVa = Array{Union{Float64,JuMP.NonlinearExpression},2}(undef, nbus, nbus)
+  dP_dPd = zeros(nbus, nbus); dP_dQd = zeros(nbus, nbus)
+
+  dQ_dPg = zeros(nbus, ngen); dQ_dQg = zeros(nbus, ngen)
+  dQ_dVm = Array{Union{Float64,JuMP.NonlinearExpression},2}(undef, nbus, nbus)
+  dQ_dVa = Array{Union{Float64,JuMP.NonlinearExpression},2}(undef, nbus, nbus)
+  dQ_dPd = zeros(nbus, nbus); dQ_dQd = zeros(nbus, nbus)
+
   for i = 1:nbus # P, Q; equations
     for k = 1:nbus # Vm, Va; buses
-     i = busIdx[mod1(i, nbus)]
-     k = busIdx[mod1(k, nbus)]
-     if h == k
-       IDX = Y[h,:].nzind
-       dP_dVa[i, k] = Y[i,k] == 0 ? 0 : @NLexpression(opfmodel, -((Vm[i] * sum(Vm[kk] * ( G[i,kk] * sin(Va[i]-Va[kk]) - B[i,kk] * cos(Va[i]-Va[kk]) ) for kk in IDX))      ) - (B[i,i] * Vm[i]^2))
-       dP_dVm[i, k] = Y[i,k] == 0 ? 0 : @NLexpression(opfmodel,  ((Vm[i] * sum(Vm[kk] * ( G[i,kk] * cos(Va[i]-Va[kk]) + B[i,kk] * sin(Va[i]-Va[kk]) ) for kk in IDX))/Vm[i]) + (G[i,i] * Vm[i]))
-       dQ_dVa[i, k] = Y[i,k] == 0 ? 0 : @NLexpression(opfmodel,  ((Vm[i] * sum(Vm[kk] * ( G[i,kk] * cos(Va[i]-Va[kk]) + B[i,kk] * sin(Va[i]-Va[kk]) ) for kk in IDX))      ) - (G[i,i] * Vm[i]^2))
-       dQ_dVm[i, k] = Y[i,k] == 0 ? 0 : @NLexpression(opfmodel,  ((Vm[i] * sum(Vm[kk] * ( G[i,kk] * sin(Va[i]-Va[kk]) - B[i,kk] * cos(Va[i]-Va[kk]) ) for kk in IDX))/Vm[i]) - (B[i,i] * Vm[i]))
+     i = BusIdx[mod1(i, nbus)]
+     k = BusIdx[mod1(k, nbus)]
+     if i == k
+       IDX = Y[i,:].nzind
+       if !isempty(BusGeners[i]); dP_dPg[i, k] = -1.0; end
+       dP_dPd[i, k] = 1.0
+       dP_dVa[i, k] = Y[i,k] == 0 ? 0.0 : @NLexpression(opfmodel, -((Vm[i] * sum(Vm[kk] * ( G[i,kk] * sin(Va[i]-Va[kk]) - B[i,kk] * cos(Va[i]-Va[kk]) ) for kk in IDX))      ) - (B[i,i] * Vm[i]^2))
+       dP_dVm[i, k] = Y[i,k] == 0 ? 0.0 : @NLexpression(opfmodel,  ((Vm[i] * sum(Vm[kk] * ( G[i,kk] * cos(Va[i]-Va[kk]) + B[i,kk] * sin(Va[i]-Va[kk]) ) for kk in IDX))/Vm[i]) + (G[i,i] * Vm[i]))
+       dQ_dVa[i, k] = Y[i,k] == 0 ? 0.0 : @NLexpression(opfmodel,  ((Vm[i] * sum(Vm[kk] * ( G[i,kk] * cos(Va[i]-Va[kk]) + B[i,kk] * sin(Va[i]-Va[kk]) ) for kk in IDX))      ) - (G[i,i] * Vm[i]^2))
+       dQ_dVm[i, k] = Y[i,k] == 0 ? 0.0 : @NLexpression(opfmodel,  ((Vm[i] * sum(Vm[kk] * ( G[i,kk] * sin(Va[i]-Va[kk]) - B[i,kk] * cos(Va[i]-Va[kk]) ) for kk in IDX))/Vm[i]) - (B[i,i] * Vm[i]))
+       if !isempty(BusGeners[i]); dQ_dQg[i, k] = -1.0; end
+       dQ_dQd[i, k] = 1.0
      else
-       dP_dVa[i, k] = Y[i,k] == 0 ? 0 : @NLexpression(opfmodel,  Vm[i] * Vm[k] * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) ))
-       dP_dVm[i, k] = Y[i,k] == 0 ? 0 : @NLexpression(opfmodel,  Vm[i]         * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) ))
-       dQ_dVa[i, k] = Y[i,k] == 0 ? 0 : @NLexpression(opfmodel, -Vm[i] * Vm[k] * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) ))
-       dQ_dVm[i, k] = Y[i,k] == 0 ? 0 : @NLexpression(opfmodel,  Vm[i]         * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) ))
+       dP_dVa[i, k] = Y[i,k] == 0 ? 0.0 : @NLexpression(opfmodel,  Vm[i] * Vm[k] * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) ))
+       dP_dVm[i, k] = Y[i,k] == 0 ? 0.0 : @NLexpression(opfmodel,  Vm[i]         * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) ))
+       dQ_dVa[i, k] = Y[i,k] == 0 ? 0.0 : @NLexpression(opfmodel, -Vm[i] * Vm[k] * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) ))
+       dQ_dVm[i, k] = Y[i,k] == 0 ? 0.0 : @NLexpression(opfmodel,  Vm[i]         * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) ))
      end
     end
   end
   #### aggregate components
-  Z_bb = zeros(nbus, nbus)
-  I_bgen = zeros(nbus, ngen)
-  for (i,j,v) in zip(generators.bus, collect(1:ngen), ones(ngen))
-    I_bgen[i,j] = v
-  end
-  I_bb = Matrix(Diagonal(ones(nbus)))
-  Z_bg = zeros(nbus, ngen)
   J = Array{Union{Float64,JuMP.NonlinearExpression}}(undef, 2nbus, 2ngen+2nbus+2nbus)
-  J .= [ -I_bgen    Z_bg     dP_dVm   dP_dVa   I_bb   Z_bb;
-          Z_bg     -I_bgen   dQ_dVm   dQ_dVa   Z_bb   I_bb    ]
-  #### partition aggregated Jacobian
-  dF_dx = J[f_RGL_idx, x_RGL_idx]
-  dF_dy = J[f_RGL_idx, y_RGL_idx]
+  J .= [ dP_dPg   dP_dQg   dP_dVm   dP_dVa   dP_dPd   dP_dQd;
+         dQ_dPg   dQ_dQg   dQ_dVm   dQ_dVa   dQ_dPd   dQ_dQd ]
+  #### partition aggregated Jacobian ([eval(Meta.parse(x)) for x in opfmodel.colNames[xidx]])
+  dF_dx = J[Fidx, xidx]
+  # dF_du = J[Fidx, uidx]
+  dF_dy = J[Fidx, yidx]
+  JuMP.registercon(opfmodel, :dF_dx, dF_dx)
+  JuMP.registercon(opfmodel, :dF_dy, dF_dy)
 
   #
   # Gamma constraint
   #
-  @constraintref Gamma_constraint[1:ny, 1:nx]
-  for i = 1:nf
+  @constraintref Gamma_constraint[1:nx, 1:ny]
+  for i = 1:nx
     for j = 1:ny
-      Gamma_constraint[i, j] = @NLconstraint(opfmodel, sum(dF_dy[i,k] * Gamma[k,j] for k = 1:ny) + dF_dx[i, j] == 0)
+      Gamma_constraint[i, j] = @NLconstraint(opfmodel, sum(dF_dx[i, k] * Gamma[k, j] for k = 1:nx) + dF_dy[i, j] + zeta[i,j] == 0)
     end
   end
   JuMP.registercon(opfmodel, :Gamma_constraint, Gamma_constraint)
 
   #
+  # Σ_x (!! NOTE: only computing the diagonal !!)
+  #
+  Σ_x = Array{JuMP.NonlinearExpression,1}(undef, nx)
+  for k = 1:nx
+    ## index of d elements in y
+    d_mask = [(yy ∈ d) for yy in y]
+    d_offset = sum([(yy ∉ d) for yy in y])
+    didx = collect(1:ny)[d_mask]
+    Σ_x[k] = @NLexpression(opfmodel, sum(Gamma[k,i] * Gamma[k,j] * Σ_d[i-d_offset, j-d_offset] for i in didx for j in didx))
+  end
+
+  #
   # single (Bonferroni) chance constraints (min)
   #
-  if full == true
-    throw(ArgumentError("`full` chance constraints are not implemented yet; only `Vm` chanc-constraints now"))
-  else
-    y = Vm[b_RGL_idx[:L]]
-    ymin = buses.Vmin[b_RGL_idx[:L]]
-    ymax = buses.Vmax[b_RGL_idx[:L]]
+  @constraintref cc_Vm_max[1:length(b_RGL_idx[:L])]
+  for i in eachindex(b_RGL_idx[:L])
+    V = Vm[b_RGL_idx[:L]][i]
+    idx = findall(V .== x)[1]
+    η = 1.0 - (γ * epsilon_Vm) / nx
+    q = quantile(z, η)
+    cc_Vm_max[i] = @NLconstraint(opfmodel, Σ_x[idx] <= (buses.Vmax[idx] - V) / q)
   end
+  JuMP.registercon(opfmodel, :cc_Vm_max, cc_Vm_max)
 
-  @constraintref chance_constraint[1:ny]
-  for i = 1:ny
-    chance_constraint[i, j] = @NLconstraint(opfmodel, )
-
-
-
-
-
-
-
-  # J = Array{JuMP.NonlinearExpression,2}(undef, 2nbus, 2ngen+2nbus+2nbus)
-  ## x = (Pd_RGL, Qd_RGL)
-  ## y = (Vm_L, Va_GL)
-  ## f = (P_GL, Q_L)
-  f_idx = [bus_RGL[:G]; bus_RGL[:L]]
-  dFdx = Array{JuMP.NonlinearExpression,2}(undef, nbus, nbus)
-  dFdy = Array{JuMP.NonlinearExpression,2}(undef, nbus, nbus)
-
-  Z_bb = spzeros(nbus, nbus)
-  Z_bb = spzeros(nbus, nbus)
-  I_bgen = spzeros(nbus, ngen)
-  for (i,j,v) in zip(opfdata.generators.bus, collect(1:ngen), ones(ngen))
-    I_bgen[i,j] = v
-  end
-  Z_bg = spzeros(nbus, ngen)
-
-  JJ = [ -I_bgen    Z_bg     dPdVm'   dPdVa'   I      Z_bb;
-          Z_bg     -I_bgen   dQdVm'   dQdVa'   Z_bb   I    ]
-  J_numerical = J_numerical[1:60, :]
-  JJ - J_numerical
-
-
-
-
-for q = 1:nbus # P, Q; equations
-  for b = 1:nbus # Vm, Va; buses
-   h = busIdx[mod1(b, nbus)]
-   k = busIdx[mod1(q, nbus)]
-   if h == k
-     IDX = Y[h,:].nzind
-     P = Vm[h] * sum(Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) ) for kk in IDX)
-     Q = Vm[h] * sum(Vm[kk] * ( G[h,kk] * sin(Va[h]-Va[kk]) - B[h,kk] * cos(Va[h]-Va[kk]) ) for kk in IDX)
-     dP_dVa = -Q       - B[h,h] * Vm[h]^2
-     dP_dVm =  P/Vm[h] + G[h,h] * Vm[h]
-     dQ_dVa =  P       - G[h,h] * Vm[h]^2
-     dQ_dVm =  Q/Vm[h] - B[h,h] * Vm[h]
-   else
-     dP_dVa =  Vm[h] * Vm[k] * ( G[h,k] * sin(Va[h]-Va[k]) - B[h,k] * cos(Va[h]-Va[k]) )
-     dP_dVm =  Vm[h]         * ( G[h,k] * cos(Va[h]-Va[k]) + B[h,k] * sin(Va[h]-Va[k]) )
-     dQ_dVa = -Vm[h] * Vm[k] * ( G[h,k] * cos(Va[h]-Va[k]) + B[h,k] * sin(Va[h]-Va[k]) )
-     dQ_dVm =  Vm[h]         * ( G[h,k] * sin(Va[h]-Va[k]) - B[h,k] * cos(Va[h]-Va[k]) )
-   end
-   J[q, b]           = dP_dVm
-   J[q, nbus+b]      = dP_dVa
-   J[nbus+q, b]      = dQ_dVm
-   J[nbus+q, nbus+b] = dQ_dVa
-  end
-end
-dPdVm = J[1:nbus, 1:nbus]
-dPdVa = J[1:nbus, (nbus+1):(2nbus)]
-dQdVm = J[(nbus+1):(2nbus), 1:nbus]
-dQdVa = J[(nbus+1):(2nbus), (nbus+1):(2nbus)]
-
-J_numerical__ = J_numerical[:, (2ngen+1):(end)]
-J_numerical__ = J_numerical__[:, 1:2nbus]
-J_numerical__[1:nbus,1:nbus] - dPdVm'
-J_numerical__[1:nbus,(nbus+1):(2nbus)] - dPdVa'
-J_numerical__[(nbus+1):(2nbus), 1:nbus] - dQdVm'
-J_numerical__[(nbus+1):(2nbus), (nbus+1):(2nbus)] - dQdVa'
-
-          G_1_1 = ( reduce(+, YffR[l] for l in FromLines[h]; init=0) + reduce(+, YttR[l] for l in ToLines[h]; init=0) + YshR[h] )
-          G_1_2 = YftR[1]
-          reduce(+, Vm[h]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[h]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[h]-Va[busIdx[lines[l].to]]  )) for l in FromLines[h]; init=0 )
-          reduce(+, Vm[h]*Vm[busIdx[lines[l].from]]*( YtfR[l]*cos(Va[h]-Va[busIdx[lines[l].from]]) + YtfI[l]*sin(Va[h]-Va[busIdx[lines[l].from]])) for l in ToLines[h]  ; init=0 )
-          dP_dVa =  (-1.0)      * ( Vm[h] * sum( Vm[kk] * ( G[h,kk] * sin(Va[h]-Va[k]) - B[h,kk] * cos(Va[h]-Va[kk])) for kk in IDX) ) - B[h,h]*Vm[h]^2
-
-          ( sum( YffR[l] for l in FromLines[b]) + sum( YttR[l] for l in ToLines[b]) + YshR[b] ) * Vm[b]^2
-          + sum( Vm[b]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[b]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[b]-Va[busIdx[lines[l].to]]  )) for l in FromLines[b] )
-          + sum( Vm[b]*Vm[busIdx[lines[l].from]]*( YtfR[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfI[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]   )
-
-          for l in ToLines[b]
-            println(YffR[l])
-          end
-          for l in FromLines[b]
-            println(YffR[l])
-          end
-
-          ## JR
-          dP_dVm = 0
-          for kk in IDX
-            global val = Vm[h] * Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) )
-            global dP_dVm += val
-            println(dP_dVm, ", ", val)
-          end
-          # val = G[h,h]*Vm[h]^2
-          # dP_dVm += val
-          println(dP_dVm, ", ", val)
-          Vm[h] * sum(Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) ) for kk in IDX)
-
-          ## opf
-          dP_dVm = 0
-          for l in FromLines[h]
-            global val = Vm[h]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[h]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[h]-Va[busIdx[lines[l].to]]  ))
-            global dP_dVm += val
-            println(dP_dVm, ", " , val)
-          end
-          val = sum(YffR[l] for l in FromLines[h])*Vm[h]^2
-          dP_dVm += val
-          println(dP_dVm, ", " , val)
-
-
-  @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
-  println("Lines with limits  ", nlinelim)
+  @printf("Buses              : %d\n", nbus)
+  @printf("Lines              : %d\n", nline)
+  @printf("Generators         : %d\n", ngen)
+  # @printf("Chance-constraints : %d\n", length(cc_Vm_max))
+  println("Lines with limits  : ", nlinelim)
 
   return OPFModel(opfmodel, :InitData, :S)
 end

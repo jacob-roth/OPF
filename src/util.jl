@@ -21,6 +21,54 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 end
 function acopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acopf_solve(M.m, opfdata)..., M.kind); end
 
+function ccacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
+
+  #
+  # Initial point - needed especially for pegase cases
+  #
+  sm = OPF.sacopf_model(opfdata)
+  sm = OPF.acopf_solve(sm, opfdata)
+  sm_eval = setup(sm.m);               ## stochastic model evaluator
+  sm_zbar = deepcopy(sm_eval.last_x);  ## stochastc model equilibrium z̄
+  ## set OPF variables
+  Pg_bar = getvalue(getindex(sm.m, :Pg))
+  Qg_bar = getvalue(getindex(sm.m, :Qg))
+  Vm_bar = getvalue(getindex(sm.m, :Vm))
+  Va_bar = getvalue(getindex(sm.m, :Va))
+  Pd_bar = getvalue(getindex(sm.m, :Pd))
+  Qd_bar = getvalue(getindex(sm.m, :Qd))
+  setvalue(getindex(opfmodel, :Pg), Pg_bar)
+  setvalue(getindex(opfmodel, :Qg), Qg_bar)
+  setvalue(getindex(opfmodel, :Vm), Vm_bar)
+  setvalue(getindex(opfmodel, :Va), Va_bar)
+  setvalue(getindex(opfmodel, :Pd), Pd_bar)
+  setvalue(getindex(opfmodel, :Qd), Qd_bar)
+  ## set sensitivitites
+  Y = computeAdmittanceMatrix(opfdata)
+  m_idx = OPF.model_idx(opfdata)
+  z_idx = OPF.om_z_idx(opfdata)
+  J, JJ, dF = OPF.jac_z_alg(sm_zbar, Y, opfdata.BusIdx, opfdata.BusGenerators, z_idx, m_idx, false)
+  Γ = dF[:dF_dx] \ -dF[:dF_dy]
+  ζ = zeros(size(Γ))
+  setvalue(getindex(opfmodel, :Gamma), Γ)
+  setvalue(getindex(opfmodel, :zeta), ζ)
+  println("Setting initial point for CC-ACOPF")
+  println("Pg_bar", Pg_bar)
+  println("Qg_bar", Qg_bar)
+  println("Vm_bar", Vm_bar)
+  println("Va_bar", Va_bar)
+  println("Pd_bar", Pd_bar)
+  println("Qd_bar", Qd_bar)
+  status = :IpoptInit
+  status = solve(opfmodel)
+
+  if status != :Optimal
+    println("Could not solve the model to optimality.")
+  end
+  return opfmodel, status
+end
+function ccacopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(ccacopf_solve(M.m, opfdata)..., M.kind); end
+
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
   Pg=zeros(length(opfdata.generators)); Qg=zeros(length(opfdata.generators)); i=1
@@ -213,6 +261,56 @@ function RGL_idx(opfdata::OPFData)
     return RGL_idx(buses_RGL, gens_RG, opfdata.BusIdx)
 end
 
+function model_idx(opfdata::OPFData)
+  lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
+  BusIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
+  nbus = length(buses); nline = length(lines); ngen = length(generators); nload = length(findall(buses.bustype .== 1))
+  opfmodel = Model(solver=IpoptSolver(print_level=0))
+  @variable(opfmodel,  generators[i].Pmin  <= Pg[i=1:ngen] <= generators[i].Pmax)
+  @variable(opfmodel,  generators[i].Qmin  <= Qg[i=1:ngen] <= generators[i].Qmax)
+  @variable(opfmodel,  buses[i].Vmin       <= Vm[i=1:nbus] <= buses[i].Vmax)
+  @variable(opfmodel, -pi                  <= Va[i=1:nbus] <= pi)
+  @variable(opfmodel,  buses[i].Pd/baseMVA <= Pd[i=1:nbus] <= buses[i].Pd/baseMVA)
+  @variable(opfmodel,  buses[i].Qd/baseMVA <= Qd[i=1:nbus] <= buses[i].Qd/baseMVA)
+  ## partition variables
+  b_RGL_idx, g_RGL_idx = RGL_idx(opfdata)
+  #### unknown
+  x = [Vm[b_RGL_idx[:L]]; Va[b_RGL_idx[:G]]; Va[b_RGL_idx[:L]]; Qg[g_RGL_idx[:G]]];
+  #### control
+  u = [Pg[g_RGL_idx[:G]]; Vm[b_RGL_idx[:G]]; Vm[b_RGL_idx[:R]]];
+  #### parameter
+  p = Va[b_RGL_idx[:R]];
+  #### uncertainty
+  d = [Pd; Qd];
+  #### aggregate "known"
+  y = [u; p; d];
+  #### dims
+  nx = length(x); nu = length(u); np = length(p); nd = length(d); ny = length(y)
+  xidx = [xx.col for xx in x]  ## index in model `z`
+  uidx = [xx.col for xx in u]  ## index in model `z`
+  pidx = [xx.col for xx in p]  ## index in model `z`
+  didx = [xx.col for xx in d]  ## index in model `z`
+  yidx = [xx.col for xx in y]  ## index in model `z`
+  Fidx = [b_RGL_idx[:L]; b_RGL_idx[:G]; nbus .+ b_RGL_idx[:L]; nbus .+ b_RGL_idx[:G]]  ## index in 2nbus equations
+  idx = Dict()
+  idx[:x] = xidx
+  idx[:u] = uidx
+  idx[:p] = pidx
+  idx[:d] = didx
+  idx[:y] = yidx
+  idx[:F] = Fidx
+  return idx
+end
+
+
+
+
+
+
+
+## -----------------------------------------------------------------------------
+## to be phased out...
+## -----------------------------------------------------------------------------
 """
 ## `om_z_idx`: get index sets to extract the following values
     - `Pg` and `Qg` in gen-sorted order, i.e., GEN1, GEN2, ... (not BUS sorted order)

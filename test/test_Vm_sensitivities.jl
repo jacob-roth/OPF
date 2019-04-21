@@ -108,3 +108,32 @@ GG = [3 4 5;
       8 9 10]
 G * S * G'
 GG * SS * GG'
+
+X = randn(3,5)
+S = randn(5,5)
+diagS = Diagonal(S)
+XSX = X * S * X'
+XdiagSX = X * diagS * X'
+i=1;j=1
+XSX[i,j]
+X[:,i]' * X[:,j] * S[i,j]
+
+X = randn(5,5)
+S = randn(5,5)
+diagS = Diagonal(S)
+XSX = X * S * X'
+XdiagSX = X' * diagS * X
+i=2;j=2
+XdiagSX[i,j]
+X[:,i]' * X[:,j] * S[i,j]
+X[:,i]' * X[j,:] * S[i,j]
+X[i,:]' * X[:,j] * S[i,j]
+X[i,:]' * X[j,:] * S[i,j]
+sum(X[1,i] * X[1,j] * S[i,j] for i=1:5 for j=1:5)
+
+A = randn(5,5)
+A = A'*A
+vals, vecs = eigen(A)
+LAM = Diagonal(vals)
+V = vecs
+V[1,:]' * V[:,1] * LAM[1,1]
