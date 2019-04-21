@@ -48,31 +48,34 @@ function jac_z_alg_ew(opfmodel_z::AbstractArray,
     Vm = opfmodel_z[z_idx[:Vm]]
     Va = opfmodel_z[z_idx[:Va]]
     #### structure
-    J = zeros(2nbus, 2nbus)
+    dP_dVm = zeros(nbus, nbus)
+    dP_dVa = zeros(nbus, nbus)
+    dQ_dVm = zeros(nbus, nbus)
+    dQ_dVa = zeros(nbus, nbus)
 
     ## compute
-    for q = 1:nbus # P, Q; equations
-        for b = 1:nbus # Vm, Va; buses
-            h = busIdx[mod1(b, nbus)]
-            k = busIdx[mod1(q, nbus)]
-            if h == k
-                IDX = [busIdx[x] for x in Y[h,:].nzind]
-                P = Vm[h] * sum(Vm[kk] * ( G[h,kk] * cos(Va[h]-Va[kk]) + B[h,kk] * sin(Va[h]-Va[kk]) ) for kk in IDX)
-                Q = Vm[h] * sum(Vm[kk] * ( G[h,kk] * sin(Va[h]-Va[kk]) - B[h,kk] * cos(Va[h]-Va[kk]) ) for kk in IDX)
-                dP_dVa = -Q       - B[h,h] * Vm[h]^2
-                dP_dVm =  P/Vm[h] + G[h,h] * Vm[h]
-                dQ_dVa =  P       - G[h,h] * Vm[h]^2
-                dQ_dVm =  Q/Vm[h] - B[h,h] * Vm[h]
+    for i = 1:nbus # P, Q; equations
+        for k = 1:nbus # Vm, Va; buses
+            i = busIdx[mod1(i, nbus)]
+            k = busIdx[mod1(k, nbus)]
+            if i == k
+                IDX = [busIdx[x] for x in Y[i,:].nzind]
+                P = Vm[i] * sum(Vm[kk] * ( G[i,kk] * cos(Va[i]-Va[kk]) + B[i,kk] * sin(Va[i]-Va[kk]) ) for kk in IDX)
+                Q = Vm[i] * sum(Vm[kk] * ( G[i,kk] * sin(Va[i]-Va[kk]) - B[i,kk] * cos(Va[i]-Va[kk]) ) for kk in IDX)
+                dP_dVa_ik = -Q       - B[i,i] * Vm[i]^2
+                dP_dVm_ik =  P/Vm[i] + G[i,i] * Vm[i]
+                dQ_dVa_ik =  P       - G[i,i] * Vm[i]^2
+                dQ_dVm_ik =  Q/Vm[i] - B[i,i] * Vm[i]
             else
-                dP_dVa =  Vm[h] * Vm[k] * ( G[h,k] * sin(Va[h]-Va[k]) - B[h,k] * cos(Va[h]-Va[k]) )
-                dP_dVm =  Vm[h]         * ( G[h,k] * cos(Va[h]-Va[k]) + B[h,k] * sin(Va[h]-Va[k]) )
-                dQ_dVa = -Vm[h] * Vm[k] * ( G[h,k] * cos(Va[h]-Va[k]) + B[h,k] * sin(Va[h]-Va[k]) )
-                dQ_dVm =  Vm[h]         * ( G[h,k] * sin(Va[h]-Va[k]) - B[h,k] * cos(Va[h]-Va[k]) )
+                dP_dVa_ik =  Vm[i] * Vm[k] * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) )
+                dP_dVm_ik =  Vm[i]         * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) )
+                dQ_dVa_ik = -Vm[i] * Vm[k] * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) )
+                dQ_dVm_ik =  Vm[i]         * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) )
             end
-            J[b, q]           = dP_dVm
-            J[b, nbus+q]      = dP_dVa
-            J[nbus+b, q]      = dQ_dVm
-            J[nbus+b, nbus+q] = dQ_dVa
+            dP_dVa[i, k] = dP_dVa_ik
+            dP_dVm[i, k] = dP_dVm_ik
+            dQ_dVa[i, k] = dQ_dVa_ik
+            dQ_dVm[i, k] = dQ_dVm_ik
         end
     end
     Z_bb = spzeros(nbus, nbus)
@@ -82,10 +85,6 @@ function jac_z_alg_ew(opfmodel_z::AbstractArray,
         I_gen[i,j] = v
     end
     Z_bg = spzeros(nbus, ngen)
-    dP_dVm = J[1:nbus, 1:nbus]
-    dP_dVa = J[1:nbus, (nbus+1):(2nbus)]
-    dQ_dVm = J[(nbus+1):(2nbus), 1:nbus]
-    dQ_dVa = J[(nbus+1):(2nbus), (nbus+1):(2nbus)]
 
     if matchnumerical == true
         JJ = [ -I_gen    Z_bg    dP_dVm   dP_dVa   I      Z_bb;
@@ -100,6 +99,84 @@ function jac_z_alg_ew(opfmodel_z::AbstractArray,
         return JJ
     end
 end
+
+function jac_z_alg(opfmodel_z::AbstractArray,
+                   Y::AbstractArray,
+                   BusIdx::Dict, BusGenerators::Array{Array{Int64,1},1}, z_idx::Dict, m_idx::Dict,
+                   matchnumerical=true)
+    ## setup
+    #### dimensions
+    ngen = length(z_idx[:Pg]); @assert(ngen == length(z_idx[:Qg]))
+    nbus = length(z_idx[:Vm]); @assert(nbus == length(z_idx[:Va]))
+    @assert(length(opfmodel_z) == 2ngen + 2nbus + 2nbus)
+    #### data
+    G = real.(Y)
+    B = imag.(Y)
+    Vm = opfmodel_z[z_idx[:Vm]]
+    Va = opfmodel_z[z_idx[:Va]]
+    dP_dPg = zeros(nbus, ngen); dP_dQg = zeros(nbus, ngen)
+    dP_dVm = zeros(nbus, nbus)
+    dP_dVa = zeros(nbus, nbus)
+    dP_dPd = zeros(nbus, nbus); dP_dQd = zeros(nbus, nbus)
+
+    dQ_dPg = zeros(nbus, ngen); dQ_dQg = zeros(nbus, ngen)
+    dQ_dVm = zeros(nbus, nbus)
+    dQ_dVa = zeros(nbus, nbus)
+    dQ_dPd = zeros(nbus, nbus); dQ_dQd = zeros(nbus, nbus)
+
+    for i = 1:nbus # P, Q; equations
+        for k = 1:nbus # Vm, Va; buses
+            i = BusIdx[mod1(i, nbus)]
+            k = BusIdx[mod1(k, nbus)]
+            if i == k
+                IDX = [BusIdx[x] for x in Y[i,:].nzind]
+                P = Vm[i] * sum(Vm[kk] * ( G[i,kk] * cos(Va[i]-Va[kk]) + B[i,kk] * sin(Va[i]-Va[kk]) ) for kk in IDX)
+                Q = Vm[i] * sum(Vm[kk] * ( G[i,kk] * sin(Va[i]-Va[kk]) - B[i,kk] * cos(Va[i]-Va[kk]) ) for kk in IDX)
+                if !isempty(BusGenerators[i]); dP_dPg[i, k] = -1.0; end
+                dP_dPd[i, k] = 1.0
+                dP_dVa[i, k] = Y[i,k] == 0 ? 0.0 : -Q       - B[i,i] * Vm[i]^2
+                dP_dVm[i, k] = Y[i,k] == 0 ? 0.0 :  P/Vm[i] + G[i,i] * Vm[i]
+                dQ_dVa[i, k] = Y[i,k] == 0 ? 0.0 :  P       - G[i,i] * Vm[i]^2
+                dQ_dVm[i, k] = Y[i,k] == 0 ? 0.0 :  Q/Vm[i] - B[i,i] * Vm[i]
+                if !isempty(BusGenerators[i]); dQ_dQg[i, k] = -1.0; end
+                dQ_dQd[i, k] = 1.0
+            else
+                dP_dVa[i, k] = Y[i,k] == 0 ? 0.0 :  Vm[i] * Vm[k] * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) )
+                dP_dVm[i, k] = Y[i,k] == 0 ? 0.0 :  Vm[i]         * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) )
+                dQ_dVa[i, k] = Y[i,k] == 0 ? 0.0 : -Vm[i] * Vm[k] * ( G[i,k] * cos(Va[i]-Va[k]) + B[i,k] * sin(Va[i]-Va[k]) )
+                dQ_dVm[i, k] = Y[i,k] == 0 ? 0.0 :  Vm[i]         * ( G[i,k] * sin(Va[i]-Va[k]) - B[i,k] * cos(Va[i]-Va[k]) )
+            end
+        end
+    end
+    #### aggregate components
+    J = [ dP_dPg   dP_dQg   dP_dVm   dP_dVa   dP_dPd   dP_dQd;
+          dQ_dPg   dQ_dQg   dQ_dVm   dQ_dVa   dQ_dPd   dQ_dQd ]
+    JJ = Dict()
+    JJ[:dP_dPg] = dP_dPg
+    JJ[:dP_dQg] = dP_dQg
+    JJ[:dP_dVm] = dP_dVm
+    JJ[:dP_dVa] = dP_dVa
+    JJ[:dP_dPd] = dP_dPd
+    JJ[:dP_dQd] = dP_dQd
+    JJ[:dQ_dPg] = dQ_dPg
+    JJ[:dQ_dQg] = dQ_dQg
+    JJ[:dQ_dVm] = dQ_dVm
+    JJ[:dQ_dVa] = dQ_dVa
+    JJ[:dQ_dPd] = dQ_dPd
+    JJ[:dQ_dQd] = dQ_dQd
+    #### partition aggregated Jacobian
+    dF = Dict()
+    dF[:dF_dx] = J[m_idx[:F], m_idx[:x]]
+    dF[:dF_dy] = J[m_idx[:F], m_idx[:y]]
+
+    ## return
+    if matchnumerical == true
+        return J
+    else
+        return J, JJ, dF
+    end
+end
+
 
 ## -----------------------------------------------------------------------------
 ## algebraic (complex, vectorized): http://www.pserc.cornell.edu/matpower/docs/ref/matpower5.0/makeJac.html
