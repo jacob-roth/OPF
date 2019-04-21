@@ -13,18 +13,18 @@ mutable struct OPFModel
 end
 export OPFModel
 
-include("opfmodel.jl")
+include("acopf_model.jl")
 export acopf_model
 
-include("sopfmodel.jl")
-export sacopf_model
+include("cc_acopf_model.jl")
+export cc_acopf_model
 
-include("ccopfmodel.jl")
-export ccacopf_model
+include("s_acopf_model.jl")
+export s_acopf_model
 
 include("util.jl")
 export acopf_solve, acopf_initialPt_IPOPT
-export ccacopf_solve
+export cc_acopf_solve
 export acopf_outputAll, get_values
 export RGL_id, RGL_idx, model_idx
 export om_z_idx

@@ -4,7 +4,7 @@
 function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 
   #
-  # Initial point - needed especially for pegase cases
+  # initial point - needed especially for pegase cases
   #
   Pg0,Qg0,Vm0,Va0 = acopf_initialPt_IPOPT(opfdata)
   setvalue(getindex(opfmodel, :Pg), Pg0)
@@ -21,16 +21,19 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 end
 function acopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acopf_solve(M.m, opfdata)..., M.kind); end
 
-function ccacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
+function cc_acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 
   #
-  # Initial point - needed especially for pegase cases
+  # initial point - needed especially for pegase cases
   #
-  sm = OPF.sacopf_model(opfdata)
+  ## standard model
+  sm = OPF.s_acopf_model(opfdata)
   sm = OPF.acopf_solve(sm, opfdata)
   sm_eval = setup(sm.m);               ## stochastic model evaluator
   sm_zbar = deepcopy(sm_eval.last_x);  ## stochastc model equilibrium z̄
+
   ## set OPF variables
+  println("Setting initial point for CC-ACOPF.")
   Pg_bar = getvalue(getindex(sm.m, :Pg))
   Qg_bar = getvalue(getindex(sm.m, :Qg))
   Vm_bar = getvalue(getindex(sm.m, :Vm))
@@ -43,22 +46,17 @@ function ccacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
   setvalue(getindex(opfmodel, :Va), Va_bar)
   setvalue(getindex(opfmodel, :Pd), Pd_bar)
   setvalue(getindex(opfmodel, :Qd), Qd_bar)
+
   ## set sensitivitites
   Y = computeAdmittanceMatrix(opfdata)
   m_idx = OPF.model_idx(opfdata)
   z_idx = OPF.om_z_idx(opfdata)
   J, JJ, dF = OPF.jac_z_alg(sm_zbar, Y, opfdata.BusIdx, opfdata.BusGenerators, z_idx, m_idx, false)
   Γ = dF[:dF_dx] \ -dF[:dF_dy]
-  ζ = zeros(size(Γ))
   setvalue(getindex(opfmodel, :Gamma), Γ)
-  setvalue(getindex(opfmodel, :zeta), ζ)
-  println("Setting initial point for CC-ACOPF")
-  println("Pg_bar", Pg_bar)
-  println("Qg_bar", Qg_bar)
-  println("Vm_bar", Vm_bar)
-  println("Va_bar", Va_bar)
-  println("Pd_bar", Pd_bar)
-  println("Qd_bar", Qd_bar)
+  if :zeta in keys(opfmodel.objDict); ζ = zeros(size(Γ)); setvalue(getindex(opfmodel, :zeta), ζ); end
+  println("Set initial point for CC-ACOPF.")
+
   status = :IpoptInit
   status = solve(opfmodel)
 
@@ -67,7 +65,7 @@ function ccacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
   end
   return opfmodel, status
 end
-function ccacopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(ccacopf_solve(M.m, opfdata)..., M.kind); end
+function cc_acopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(cc_acopf_solve(M.m, opfdata)..., M.kind); end
 
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
@@ -222,7 +220,7 @@ function RGL_id(opfdata::OPFData)
     buses_R_id = [opfdata.bus_ref]
     buses_G_id = filter(x -> x ∉ buses_R_id, opfdata.generators.bus)
     buses_L_id = filter(x -> x ∉ Set([buses_G_id; buses_R_id]), opfdata.buses.bus_i)  ## purely load buses
-    #### `opfdata.generators` ordering (NOTE: assuming generators' `ID`s are same as index in generator array
+    #### `opfdata.generators` ordering (!! NOTE: assuming generators' `ID`s are same as index in generator array !!)
     gens_R_id = findall(opfdata.generators.bus .== opfdata.bus_ref)
     gens_G_id = findall(opfdata.generators.bus .!= opfdata.bus_ref)
 

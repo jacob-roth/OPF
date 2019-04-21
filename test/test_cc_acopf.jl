@@ -9,16 +9,21 @@ data[:Va_max]            =  pi * ones(nbus)
 options = Dict()
 options[:lossless]       = false
 options[:current_rating] = false
-options[:epsilon_Vm]     = 0.25
+options[:epsilon_Vm]     = 0.0001
 options[:epsilon_Va]     = 0.05
 options[:epsilon_Qg]     = 0.05
 options[:gamma]          = 1.0
+options[:relax_Gamma]    = false
 options[:print_level]    = 5
 
-cm = OPF.ccacopf_model(opfdata, options, data)
-cm = OPF.ccacopf_solve(cm, opfdata)
+cm = OPF.cc_acopf_model(opfdata, options, data)
+cm = OPF.cc_acopf_solve(cm, opfdata)
 
+@test norm(getvalue(cm.m[:Gamma]) - (getvalue(cm.m[:dF_dx]) \ -getvalue(cm.m[:dF_dy]))) <= tol
 end # testset
+
+# getvalue(cm.m[:zeta])
+# norm(getvalue(cm.m[:zeta]))
 
 # cm_eval = setup(cm.m)
 # m_idx = OPF.model_idx(opfdata)

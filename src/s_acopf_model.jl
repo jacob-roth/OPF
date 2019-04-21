@@ -1,4 +1,4 @@
-function sacopf_model(opf_data, options::Dict=Dict())
+function s_acopf_model(opf_data, options::Dict=Dict())
   # parse options
   lossless = haskey(options, :lossless) ? options[:lossless] : false
   current_rating = haskey(options, :current_rating) ? options[:current_rating] : false
