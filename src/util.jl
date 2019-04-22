@@ -49,10 +49,8 @@ function cc_acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 
   ## set sensitivitites
   Y = computeAdmittanceMatrix(opfdata)
-  m_idx = OPF.model_idx(opfdata)
-  z_idx = OPF.om_z_idx(opfdata)
-  J, JJ, dF = OPF.jac_z_alg(sm_zbar, Y, opfdata.BusIdx, opfdata.BusGenerators, z_idx, m_idx, false)
-  Γ = dF[:dF_dx] \ -dF[:dF_dy]
+  m_idx = OPF.model_idx(opfdata, true)
+  Γ = OPF.get_Gamma_ew(sm_zbar, Y, opfdata.BusIdx, opfdata.BusGenerators, m_idx, :y)
   setvalue(getindex(opfmodel, :Gamma), Γ)
   if :zeta in keys(opfmodel.objDict); ζ = zeros(size(Γ)); setvalue(getindex(opfmodel, :zeta), ζ); end
   println("Set initial point for CC-ACOPF.")

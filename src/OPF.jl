@@ -41,6 +41,6 @@ export dStilde_dVtilde, jac_z_alg_vec
 export jac_z
 
 include("sensitivities.jl")
-export get_Gamma, get_Gamma_fd
+export get_Gamma, get_Gamma_fd, get_Gamma_ew
 
 end # module

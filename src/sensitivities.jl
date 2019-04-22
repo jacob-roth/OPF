@@ -5,7 +5,7 @@
 ### returns:
     - `Γ::AbstractArray`: dx/dd
 """
-function get_Gamma(z::AbstractArray, data::Dict, Gamma_type::Symbol=:ew, epsilon::Float64=1e-5)
+function get_Gamma(z::AbstractArray, data::Dict, jac_type::Symbol=:ew, Gamma_type::Symbol=:d, epsilon::Float64=1e-5)
     @assert(haskey(data, :m_idx))
     m_idx         = data[:m_idx]
     Y             = data[:Y]
@@ -16,17 +16,36 @@ function get_Gamma(z::AbstractArray, data::Dict, Gamma_type::Symbol=:ew, epsilon
 
     if Gamma_type ∈ [:vec, :num, :ew]
         if Gamma_type == :num
-            J = jac_z(z, data, Gamma_type)
+            J = jac_z(z, data, jac_type)
         else
-            J,_,_ = jac_z(z, data, Gamma_type)
+            J,_,_ = jac_z(z, data, jac_type)
         end
         dF_dx = J[m_idx[:F], m_idx[:x]]
         dF_dy = J[m_idx[:F], m_idx[:y]]
         dF_dd = J[m_idx[:F], m_idx[:d]]
-        Γ = dF_dx \ -dF_dd
-        return Γ
+        if Gamma_type == :d
+            return Γ = dF_dx \ -dF_dd
+        elseif Gamma_type == :y
+            return Γ = dF_dx \ -dF_dy
+        end
     elseif Gamma_type == :fd
+        ## !! NOTE: only Gamma_type `:d` !!
+        throw(ArgumentError("only type `:d` allowed now for finite difference"))
         return get_Gamma_fd(z, Y, Pnet, Qnet, m_idx, BusIdx, BusGenerators, epsilon)
+    end
+end
+function get_Gamma_ew(z::AbstractArray, Y::AbstractArray,
+                      BusIdx::Dict, BusGenerators::Array{Array{Int64,1},1}, m_idx::Dict,
+                      Gamma_type::Symbol=:y)
+
+    J,_,_ = jac_z_alg_ew(z, Y, BusIdx, BusGenerators, m_idx)
+    dF_dx = J[m_idx[:F], m_idx[:x]]
+    dF_dy = J[m_idx[:F], m_idx[:y]]
+    dF_dd = J[m_idx[:F], m_idx[:d]]
+    if Gamma_type == :d
+        return Γ = dF_dx \ -dF_dd
+    elseif Gamma_type == :y
+        return Γ = dF_dx \ -dF_dy
     end
 end
 
