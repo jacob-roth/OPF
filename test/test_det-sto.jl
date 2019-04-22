@@ -6,7 +6,7 @@ dm_zbar = deepcopy(dm_eval.last_x);  ## deterministic model equilibrium z̄
 OPF.acopf_outputAll(dm, opfdata)
 
 ## stochastic acopf
-sm = OPF.sacopf_model(opfdata)
+sm = OPF.s_acopf_model(opfdata)
 sm = OPF.acopf_solve(sm, opfdata)
 sm_eval = setup(sm.m);               ## stochastic model evaluator
 sm_zbar = deepcopy(sm_eval.last_x);  ## stochastc model equilibrium z̄
