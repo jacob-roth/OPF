@@ -259,7 +259,15 @@ function RGL_idx(opfdata::OPFData)
     return RGL_idx(buses_RGL, gens_RG, opfdata.BusIdx)
 end
 
-function model_idx(opfdata::OPFData)
+"""
+## `model_idx`: get idx sets of `OPFModel`
+### arguments:
+    - `opfdata::OPFData`: opf data for a particular case
+    - `xtilde::Bool`: binary option wheere `true` gets full `x̃` (includes Qg), `false` gets reduced `x` (exlcudes Qg)
+### returns:
+    - `idx::Dict`: dictionary of indices
+"""
+function model_idx(opfdata::OPFData, xtilde::Bool=false)
   lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
   BusIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
   nbus = length(buses); nline = length(lines); ngen = length(generators); nload = length(findall(buses.bustype .== 1))
@@ -273,7 +281,11 @@ function model_idx(opfdata::OPFData)
   ## partition variables
   b_RGL_idx, g_RGL_idx = RGL_idx(opfdata)
   #### unknown
-  x = [Vm[b_RGL_idx[:L]]; Va[b_RGL_idx[:G]]; Va[b_RGL_idx[:L]]];
+  if xtilde == true
+    x = [Vm[b_RGL_idx[:L]]; Va[b_RGL_idx[:G]]; Va[b_RGL_idx[:L]]; Qg[g_RGL_idx[:G]]];
+  else
+    x = [Vm[b_RGL_idx[:L]]; Va[b_RGL_idx[:G]]; Va[b_RGL_idx[:L]]];
+  end
   #### control
   u = [Pg[g_RGL_idx[:G]]; Vm[b_RGL_idx[:G]]; Vm[b_RGL_idx[:R]]];
   #### parameter
@@ -289,7 +301,11 @@ function model_idx(opfdata::OPFData)
   pidx = [xx.col for xx in p]  ## index in model `z`
   didx = [xx.col for xx in d]  ## index in model `z`
   yidx = [xx.col for xx in y]  ## index in model `z`
-  Fidx = [b_RGL_idx[:L]; b_RGL_idx[:G]; nbus .+ b_RGL_idx[:L]]  ## index in 2nbus equations
+  if xtilde == true
+    Fidx = [b_RGL_idx[:L]; b_RGL_idx[:G]; nbus .+ b_RGL_idx[:L]; nbus .+ b_RGL_idx[:G]]  ## index in 2nbus equations
+  else
+    Fidx = [b_RGL_idx[:L]; b_RGL_idx[:G]; nbus .+ b_RGL_idx[:L]]  ## index in 2nbus equations
+  end
   idx = Dict()
   idx[:x] = xidx
   idx[:u] = uidx
@@ -305,290 +321,6 @@ function model_idx(opfdata::OPFData)
   idx[:Qd] = [x.col for x in getindex(opfmodel, :Qd)]
   return idx
 end
-function model_tilde_idx(opfdata::OPFData)
-  lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
-  BusIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
-  nbus = length(buses); nline = length(lines); ngen = length(generators); nload = length(findall(buses.bustype .== 1))
-  opfmodel = Model(solver=IpoptSolver(print_level=0))
-  @variable(opfmodel,  generators[i].Pmin  <= Pg[i=1:ngen] <= generators[i].Pmax)
-  @variable(opfmodel,  generators[i].Qmin  <= Qg[i=1:ngen] <= generators[i].Qmax)
-  @variable(opfmodel,  buses[i].Vmin       <= Vm[i=1:nbus] <= buses[i].Vmax)
-  @variable(opfmodel, -pi                  <= Va[i=1:nbus] <= pi)
-  @variable(opfmodel,  buses[i].Pd/baseMVA <= Pd[i=1:nbus] <= buses[i].Pd/baseMVA)
-  @variable(opfmodel,  buses[i].Qd/baseMVA <= Qd[i=1:nbus] <= buses[i].Qd/baseMVA)
-  ## partition variables
-  b_RGL_idx, g_RGL_idx = RGL_idx(opfdata)
-  #### unknown
-  x = [Vm[b_RGL_idx[:L]]; Va[b_RGL_idx[:G]]; Va[b_RGL_idx[:L]]; Qg[g_RGL_idx[:G]]];
-  #### control
-  u = [Pg[g_RGL_idx[:G]]; Vm[b_RGL_idx[:G]]; Vm[b_RGL_idx[:R]]];
-  #### parameter
-  p = Va[b_RGL_idx[:R]];
-  #### uncertainty
-  d = [Pd; Qd];
-  #### aggregate "known"
-  y = [u; p; d];
-  #### dims
-  nx = length(x); nu = length(u); np = length(p); nd = length(d); ny = length(y)
-  xidx = [xx.col for xx in x]  ## index in model `z`
-  uidx = [xx.col for xx in u]  ## index in model `z`
-  pidx = [xx.col for xx in p]  ## index in model `z`
-  didx = [xx.col for xx in d]  ## index in model `z`
-  yidx = [xx.col for xx in y]  ## index in model `z`
-  Fidx = [b_RGL_idx[:L]; b_RGL_idx[:G]; nbus .+ b_RGL_idx[:L]; nbus .+ b_RGL_idx[:G]]  ## index in 2nbus equations
-  idx = Dict()
-  idx[:x] = xidx
-  idx[:u] = uidx
-  idx[:p] = pidx
-  idx[:d] = didx
-  idx[:y] = yidx
-  idx[:F] = Fidx
-  idx[:Pg] = [x.col for x in getindex(opfmodel, :Pg)]
-  idx[:Qg] = [x.col for x in getindex(opfmodel, :Qg)]
-  idx[:Vm] = [x.col for x in getindex(opfmodel, :Vm)]
-  idx[:Va] = [x.col for x in getindex(opfmodel, :Va)]
-  idx[:Pd] = [x.col for x in getindex(opfmodel, :Pd)]
-  idx[:Qd] = [x.col for x in getindex(opfmodel, :Qd)]
-  return idx
-end
-
-
-
-
-
-
-
-## -----------------------------------------------------------------------------
-## to be phased out...
-## -----------------------------------------------------------------------------
-"""
-## `om_z_idx`: get index sets to extract the following values
-    - `Pg` and `Qg` in gen-sorted order, i.e., GEN1, GEN2, ... (not BUS sorted order)
-    - `Vm`, `Va`, `Pd`, `Qd` in bus-sorted order, i.e., BUS1, BUS2, ...
-##  from a vector `om_z` ("opfmodel-z") which contains an `OPFModel`'s aggregate variable denoted by `z`
-### arguments:
-    - `opfdata::OPFData`: opf data for a particular case
-### returns:
-    - `z_idx::Dict`: dictionary of index sets for extracting values from `om_z`
-### example:
-```
-julia> z_idx = om_z_idx(opfdata)
-julia> om_z = sm_zbar
-julia> Vm = om_z[z_idx[:Vm]]
-```
-"""
-function om_z_idx(opfdata::OPFData)
-    nbus = length(opfdata.buses)
-    ngen = length(opfdata.generators)
-    Pg_idx_offset = 0; Qg_idx_offset = ngen
-    Vm_idx_offset = 2*ngen; Va_idx_offset = 2*ngen+nbus
-    Pd_idx_offset = 2*ngen+2*nbus; Qd_idx_offset = 2*ngen+3*nbus
-    z_idx = Dict()
-    z_idx[:Pg] = Pg_idx_offset .+ collect(1:ngen)
-    z_idx[:Qg] = Qg_idx_offset .+ collect(1:ngen)
-    z_idx[:Vm] = Vm_idx_offset .+ collect(1:nbus)
-    z_idx[:Va] = Va_idx_offset .+ collect(1:nbus)
-    z_idx[:Pd] = Pd_idx_offset .+ collect(1:nbus)
-    z_idx[:Qd] = Qd_idx_offset .+ collect(1:nbus)
-    return z_idx
-end
-
-"""
-## `om_x_RGL_idx`: get `RGL`-partitioned index sets to extract the following
-    - `x` (parameters): `Pd_{R,G,L}`, `Qd_{R,G,L}`
-##  from a vector `om_z` ("opfmodel-z") which contains an `OPFModel`'s aggregate variable denoted by `z`
-### arguments:
-    - `opfdata::OPFData`: opf data for a particular case
-### returns:
-    - `x_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting values from `om_z`
-"""
-function om_x_RGL_idx(opfdata::OPFData)
-    ngen = length(opfdata.generators); nbus = length(opfdata.buses)
-    busIdx = opfdata.BusIdx
-
-    ## offsets
-    Pg_idx_offset = 0; Qg_idx_offset = ngen
-    Vm_idx_offset = 2*ngen; Va_idx_offset = 2*ngen+nbus
-    Pd_idx_offset = 2*ngen+2*nbus; Qd_idx_offset = 2*ngen+3*nbus
-    bus_idx, gen_idx = RGL_idx(opfdata)
-
-    x_RGL_idx = Dict()
-    ## parameters (`x`)
-    #### Pd^{R ∪ G ∪ L}
-    x_RGL_idx[:Pd_R]   = Pd_idx_offset .+ bus_idx[:R]
-    x_RGL_idx[:Pd_G]   = Pd_idx_offset .+ bus_idx[:G]
-    x_RGL_idx[:Pd_L]   = Pd_idx_offset .+ bus_idx[:L]
-    x_RGL_idx[:Pd_RGL] = [x_RGL_idx[:Pd_R]; x_RGL_idx[:Pd_G]; x_RGL_idx[:Pd_L]]
-    ####  Qd^{R ∪ G ∪ L}
-    x_RGL_idx[:Qd_R]   = Qd_idx_offset .+ bus_idx[:R]
-    x_RGL_idx[:Qd_G]   = Qd_idx_offset .+ bus_idx[:G]
-    x_RGL_idx[:Qd_L]   = Qd_idx_offset .+ bus_idx[:L]
-    x_RGL_idx[:Qd_RGL] = [x_RGL_idx[:Qd_R]; x_RGL_idx[:Qd_G]; x_RGL_idx[:Qd_L]]
-    #### Vm^{R ∪ G}
-    x_RGL_idx[:Vm_R]   = Vm_idx_offset .+ bus_idx[:R]
-    x_RGL_idx[:Vm_G]   = Vm_idx_offset .+ bus_idx[:G]
-    #### Va^{R}
-    x_RGL_idx[:Va_R]   = Va_idx_offset .+ bus_idx[:R]
-    return x_RGL_idx
-end
-
-"""
-## `om_y_RGL_idx`: get `RGL`-partitioned index sets to extract the following
-    - `y` (variables): `Qg_{R,G}`, `Vm_L`, `Va_{G,L}`
-##  from a vector `om_z` ("opfmodel-z") which contains an `OPFModel`'s aggregate variable denoted by `z`
-### arguments:
-    - `opfdata::OPFData`: opf data for a particular case
-### returns:
-    - `y_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting values from `om_z`
-"""
-function om_y_RGL_idx(opfdata::OPFData)
-    ngen = length(opfdata.generators); nbus = length(opfdata.buses)
-    busIdx = opfdata.BusIdx
-
-    ## offsets
-    Pg_idx_offset = 0; Qg_idx_offset = ngen
-    Vm_idx_offset = 2*ngen; Va_idx_offset = 2*ngen+nbus
-    Pd_idx_offset = 2*ngen+2*nbus; Qd_idx_offset = 2*ngen+3*nbus
-    bus_idx, gen_idx = RGL_idx(opfdata)
-
-    y_RGL_idx = Dict()
-    ## variables (`y`)
-    #### Qg^{R ∪ G}
-    y_RGL_idx[:Qg_R]   = Qg_idx_offset .+ gen_idx[:R]
-    y_RGL_idx[:Qg_G]   = Qg_idx_offset .+ gen_idx[:G]
-    y_RGL_idx[:Qg_RG]  = [y_RGL_idx[:Qg_R]; y_RGL_idx[:Qg_G]]
-    #### Vm^L
-    y_RGL_idx[:Vm_L]   = Vm_idx_offset .+ bus_idx[:L]
-    #### Va^{G ∪ L}
-    y_RGL_idx[:Va_G]   = Va_idx_offset .+ bus_idx[:G]
-    y_RGL_idx[:Va_L]   = Va_idx_offset .+ bus_idx[:L]
-    y_RGL_idx[:Va_GL]  = [y_RGL_idx[:Va_G]; y_RGL_idx[:Va_L]]
-    return y_RGL_idx
-end
-
-"""
-## `om_pfe_RGL_idx`: get `RGL`-partitioned index sets to extract the following PF equations
-    - `f`: `P_G` and `P_L`; `Q_R`, `Q_G`, and `Q_L`
-##  from an object of dimension `2nbus`
-### arguments:
-    - `opfdata::OPFData`: opf data for a particular case
-### returns:
-    - `pfe_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting PF equations
-"""
-function om_pfe_RGL_idx(opfdata::OPFData)
-    ngen = length(opfdata.generators); nbus = length(opfdata.buses)
-    busIdx = opfdata.BusIdx
-
-    ## offsets
-    Pg_idx_offset = 0; Qg_idx_offset = ngen
-    Vm_idx_offset = 2*ngen; Va_idx_offset = 2*ngen+nbus
-    Pd_idx_offset = 2*ngen+2*nbus; Qd_idx_offset = 2*ngen+3*nbus
-    bus_idx, gen_idx = RGL_idx(opfdata)
-
-    pfe_RGL_idx = Dict()
-    ## equations (`f`)
-    #### Pnet^{R ∪ G ∪ L}
-    pfe_RGL_idx[:P_G] = bus_idx[:G]
-    pfe_RGL_idx[:P_L] = bus_idx[:L]
-    pfe_RGL_idx[:P_GL] = [pfe_RGL_idx[:P_G]; pfe_RGL_idx[:P_L]]
-    #### Qnet^{R ∪ G ∪ L}
-    pfe_RGL_idx[:Q_R] = nbus .+ bus_idx[:R]
-    pfe_RGL_idx[:Q_G] = nbus .+ bus_idx[:G]
-    pfe_RGL_idx[:Q_L] = nbus .+ bus_idx[:L]
-    pfe_RGL_idx[:Q_RGL] = [pfe_RGL_idx[:Q_R]; pfe_RGL_idx[:Q_G]; pfe_RGL_idx[:Q_L]]
-    return pfe_RGL_idx
-end
-
-"""
-## `om_jac_RGL_idx`: get `RGL`-partitioned index sets to extract `x`, `y`, and `pfe` indices
-### arguments:
-    - `opfdata::OPFData`: opf data for a particular case
-### returns:
-    - `jac_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting PF equations
-"""
-function om_jac_RGL_idx(opfdata::OPFData)
-    jac_RGL_idx = Dict()
-    jac_RGL_idx[:x] = om_x_RGL_idx(opfdata)
-    jac_RGL_idx[:y] = om_y_RGL_idx(opfdata)
-    jac_RGL_idx[:f] = om_pfe_RGL_idx(opfdata)
-    return jac_RGL_idx
-end
-
-"""
-## `om_y_RGL_idx`: get `RGL`-partitioned index sets to extract `y` (variables)
-### arguments:
-    - `jac_RGL_idx::Dict`: full component dictionary from `om_jac_RGL_idx`
-    - `full::Bool`: option to return `Qg_RG` as a variable or not
-### returns:
-    - `yidx::Vector`: array of indixes for `y := ([Qg_RG], Vm_L, Va_GL)`
-"""
-function om_y_RGL_idx(jac_RGL_idx::Dict, full=false)
-    if full
-        yidx = [jac_RGL_idx[:y][:Qg_RG]; jac_RGL_idx[:y][:Vm_L]; jac_RGL_idx[:y][:Va_GL]]
-    else
-        yidx = [jac_RGL_idx[:y][:Vm_L]; jac_RGL_idx[:y][:Va_GL]]
-    end
-    return yidx
-end
-
-"""
-## `om_x_RGL_idx`: get `RGL`-partitioned index sets to extract `x` (parameters)
-### arguments:
-    - `jac_RGL_idx::Dict`: full component dictionary from `om_jac_RGL_idx`
-### returns:
-    - `xidx::Vector`: array of indixes for `x := (Pd_RGL, Qd_RGL)`
-"""
-function om_x_RGL_idx(jac_RGL_idx::Dict)
-    xidx = [jac_RGL_idx[:x][:Pd_RGL]; jac_RGL_idx[:x][:Qd_RGL]]
-    return xidx
-end
-
-"""
-## `om_f_RGL_idx`: get `RGL`-partitioned index sets to extract `f` (pfe equations)
-### arguments:
-    - `jac_RGL_idx::Dict`: full component dictionary from `om_jac_RGL_idx`
-    - `full::Bool`: option to return equations for `Qg_RG` or not
-### returns:
-    - `xidx::Vector`: array of indixes for `f := (P_G, P_L, [Q_R, Q_G], Q_L)`
-"""
-function om_f_RGL_idx(jac_RGL_idx::Dict, full=false)
-    if full
-        fidx = [jac_RGL_idx[:f][:P_G]; jac_RGL_idx[:f][:P_L]; jac_RGL_idx[:f][:Q_RGL]]
-    else
-        fidx = [jac_RGL_idx[:f][:P_G]; jac_RGL_idx[:f][:P_L]; jac_RGL_idx[:f][:Q_L]]
-    end
-    return fidx
-end
-
-# """
-# ## `opfmodeljac_RGL_idx`: get `RGL`-partitioned index sets to extract the following PF equations
-#     - `P_G` and `P_L`
-#     - `Q_R`, `Q_G`, and `Q_L`
-# ##  from an object of dimension `2nbus`
-# ### arguments:
-#     - `opfdata::OPFData`: opf data for a particular case
-# ### returns:
-#     - `ome_RGL_idx::Dict`: dictionary of `RGL`-partitioned index sets for extracting PF equations
-# """
-# function opfmodeljac_RGL_idx(opfdata::OPFData)
-#
-# function jac_idx_y(vars::Dict, full::Bool=true)
-#     if full == true
-#         return [vars[:Qg_RG]; vars[:Vm_L]; vars[:Va_GL]]
-#     else
-#         return [vars[:Vm_L]; vars[:Va_GL]]
-#     end
-# end
-# function jac_idx_x(pars::Dict)
-#     return [pars[:Pd_RGL]; pars[:Qd_RGL]]
-# end
-# function jac_idx_f(eqns::Dict, full::Bool=true)
-#     if full == true
-#         return [eqns[:P_GL]; eqns[:Q_RGL]]
-#     else
-#         return [eqns[:P_GL]; eqns[:Q_L]]
-#     end
-# end
 
 ## -----------------------------------------------------------------------------
 ## helpers

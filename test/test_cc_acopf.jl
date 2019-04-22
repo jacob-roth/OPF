@@ -21,19 +21,3 @@ cm = OPF.cc_acopf_solve(cm, opfdata)
 
 @test norm(getvalue(cm.m[:Gamma]) - (getvalue(cm.m[:dF_dx]) \ -getvalue(cm.m[:dF_dy]))) <= tol
 end # testset
-
-# getvalue(cm.m[:zeta])
-# norm(getvalue(cm.m[:zeta]))
-
-# cm_eval = setup(cm.m)
-# m_idx = OPF.model_idx(opfdata)
-# z_idx = OPF.om_z_idx(opfdata)
-# J, JJ, dF = OPF.jac_z_alg(sm_zbar, Y, opfdata.BusIdx, opfdata.BusGenerators, z_idx, m_idx, false)
-# Gamma = dF[:dF_dx] \ -dF[:dF_dy]
-#
-# err = 0
-# for i = 1:nx
-#     for j = 1:ny
-#         global err += sum(dF[:dF_dx][i, k] * Gamma[k, j] for k = 1:nx) + dF[:dF_dy][i, j]
-#     end
-# end
