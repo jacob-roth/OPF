@@ -21,7 +21,7 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 end
 function acopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acopf_solve(M.m, opfdata)..., M.kind); end
 
-function cc_acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
+function cc_acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict)
 
   #
   # initial point - needed especially for pegase cases
@@ -49,8 +49,8 @@ function cc_acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 
   ## set sensitivitites
   Y = computeAdmittanceMatrix(opfdata)
-  m_idx = OPF.model_idx(opfdata, true)
-  Γ = OPF.get_Gamma_ew(sm_zbar, Y, opfdata.BusIdx, opfdata.BusGenerators, m_idx, :y)
+  m_idx = OPF.model_idx(opfdata, options[:xtilde])
+  Γ = OPF.get_Gamma_ew(sm_zbar, Y, opfdata.BusIdx, opfdata.BusGenerators, m_idx, options[:Gamma_type])
   setvalue(getindex(opfmodel, :Gamma), Γ)
   if :zeta in keys(opfmodel.objDict); ζ = zeros(size(Γ)); setvalue(getindex(opfmodel, :zeta), ζ); end
   println("Set initial point for CC-ACOPF.")
@@ -63,7 +63,7 @@ function cc_acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
   end
   return opfmodel, status
 end
-function cc_acopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(cc_acopf_solve(M.m, opfdata)..., M.kind); end
+function cc_acopf_solve(M::OPFModel, opfdata::OPFData, options::Dict); return OPFModel(cc_acopf_solve(M.m, opfdata, options)..., M.kind); end
 
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)

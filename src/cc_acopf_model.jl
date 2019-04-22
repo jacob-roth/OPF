@@ -11,6 +11,8 @@ function cc_acopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
   γ              = haskey(options, :gamma)          ? options[:gamma]          : 1.0
   relax_Gamma    = haskey(options, :relax_Gamma)    ? options[:relax_Gamma]    : false
   print_level    = haskey(options, :print_level)    ? options[:print_level]    : 0
+  xtilde         = haskey(options, :xtilde)         ? options[:xtilde]         : true
+  Gamma_type     = haskey(options, :Gamma_type)     ? options[:Gamma_type]     : :d
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -32,7 +34,7 @@ function cc_acopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
   Σ_d    = haskey(data, :Sigma_d) ? data[:Sigma_d] : Matrix(Diagonal(ones(2nbus)))
   Va_min = haskey(data, :Va_min)  ? data[:Va_min]  : -pi * ones(nbus)
   Va_max = haskey(data, :Va_max)  ? data[:Va_max]  :  pi * ones(nbus)
-  z = Normal(0,1)
+  Z = Normal(0,1)
 
   #
   # model
@@ -52,29 +54,20 @@ function cc_acopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
 
   ## partitioned variable containers
   b_RGL_idx, g_RGL_idx = RGL_idx(opfdata)
-  #### unknown
-  x = [Vm[b_RGL_idx[:L]]; Va[b_RGL_idx[:G]]; Va[b_RGL_idx[:L]]; Qg[g_RGL_idx[:G]]];
-  #### control
-  u = [Pg[g_RGL_idx[:G]]; Vm[b_RGL_idx[:G]]; Vm[b_RGL_idx[:R]]];
-  #### parameter
-  p = Va[b_RGL_idx[:R]];
-  #### uncertainty
-  d = [Pd; Qd];
-  #### aggregate "known"
-  y = [u; p; d];
-  #### dims
+  m_idx = model_idx(opfdata, xtilde)
+  z = [Pg; Qg; Vm; Va; Pd; Qd]
+  x = z[m_idx[:x]]
+  u = z[m_idx[:u]]
+  p = z[m_idx[:p]]
+  d = z[m_idx[:d]]
+  y = z[m_idx[:y]]
   nx = length(x); nu = length(u); np = length(p); nd = length(d); ny = length(y)
-  xidx = [xx.col for xx in x]  ## index in model `z`
-  uidx = [xx.col for xx in u]  ## index in model `z`
-  pidx = [xx.col for xx in p]  ## index in model `z`
-  didx = [xx.col for xx in d]  ## index in model `z`
-  yidx = [xx.col for xx in y]  ## index in model `z`
-  Fidx = [b_RGL_idx[:L]; b_RGL_idx[:G]; nbus .+ b_RGL_idx[:L]; nbus .+ b_RGL_idx[:G]]  ## index in 2nbus equations
+  ng = Gamma_type == :y ? ny : nd  ## dimension 2 of Gamma
 
-  ## cc variables
-  @variable(opfmodel, Gamma[i=1:nx, j=1:ny])
+  ## Gamma, zeta variables
+  @variable(opfmodel, Gamma[i=1:nx, j=1:ng])
   if relax_Gamma == true
-    @variable(opfmodel, zeta[i=1:nx, j=1:ny])
+    @variable(opfmodel, zeta[i=1:nx, j=1:ng])
   end
 
   ## fix variables
@@ -213,21 +206,31 @@ function cc_acopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
          dQ_dPg   dQ_dQg   dQ_dVm   dQ_dVa   dQ_dPd   dQ_dQd ]
 
   ## partition aggregated Jacobian ([eval(Meta.parse(x)) for x in opfmodel.colNames[xidx]])
-  dF_dx = J[Fidx, xidx]
-  dF_dy = J[Fidx, yidx]
+  # dF_dx = J[Fidx, xidx]
+  # dF_dy = J[Fidx, yidx]
+  # dF_dd = J[Fidx, didx]
+  dF_dx = J[m_idx[:F], m_idx[:x]]
+  dF_dy = J[m_idx[:F], m_idx[:y]]
+  dF_dd = J[m_idx[:F], m_idx[:d]]
   JuMP.registercon(opfmodel, :dF_dx, dF_dx)
   JuMP.registercon(opfmodel, :dF_dy, dF_dy)
+  JuMP.registercon(opfmodel, :dF_dd, dF_dd)
 
   #
   # `Gamma` constraint
   #
-  @constraintref Gamma_constraint[1:nx, 1:ny]
+  @constraintref Gamma_constraint[1:nx, 1:ng]
+  if Gamma_type == :y
+    dF_d_ = dF_dy
+  else
+    dF_d_ = dF_dd
+  end
   for i = 1:nx
-    for j = 1:ny
+    for j = 1:ng
       if relax_Gamma == true
-        Gamma_constraint[i, j] = @NLconstraint(opfmodel, sum(dF_dx[i, k] * Gamma[k, j] for k = 1:nx) + dF_dy[i, j] + zeta[i,j] == 0)
+        Gamma_constraint[i, j] = @NLconstraint(opfmodel, sum(dF_dx[i,k] * Gamma[k,j] for k = 1:nx) + dF_d_[i,j] + zeta[i,j] == 0)
       else
-        Gamma_constraint[i, j] = @NLconstraint(opfmodel, sum(dF_dx[i, k] * Gamma[k, j] for k = 1:nx) + dF_dy[i, j] == 0)
+        Gamma_constraint[i, j] = @NLconstraint(opfmodel, sum(dF_dx[i,k] * Gamma[k,j] for k = 1:nx) + dF_d_[i,j] == 0)
       end
     end
   end
@@ -239,9 +242,14 @@ function cc_acopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
   Σ_x = Array{JuMP.NonlinearExpression,1}(undef, nx)
   for k = 1:nx
     ## index of d elements in y
-    d_mask = [(yy ∈ d) for yy in y]
-    d_offset = sum([(yy ∉ d) for yy in y])
-    didx = collect(1:ny)[d_mask]
+    if Gamma_type == :y
+      d_mask = [(yy ∈ d) for yy in y]
+      d_offset = sum([(yy ∉ d) for yy in y])
+      didx = collect(1:ny)[d_mask]
+    else
+      didx = collect(1:nd)
+      d_offset = 0
+    end
     ## expression
     Σ_x[k] = @NLexpression(opfmodel, sum(Gamma[k,i] * Gamma[k,j] * Σ_d[i-d_offset, j-d_offset] for i in didx for j in didx))
   end
@@ -255,7 +263,7 @@ function cc_acopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
     V = Vm[b_RGL_idx[:L]][i]
     idx = findall(V .== x)[1]
     η = 1.0 - (γ * epsilon_Vm) / nx
-    q = quantile(z, η)
+    q = quantile(Z, η)
     cc_VmL_max[i] = @NLconstraint(opfmodel, Σ_x[idx] <= (buses.Vmax[idx] - V) / q)
   end
   JuMP.registercon(opfmodel, :cc_VmL_max, cc_VmL_max)
@@ -266,7 +274,7 @@ function cc_acopf_model(opfdata, options::Dict=Dict(), data::Dict=Dict())
     V = Vm[b_RGL_idx[:L]][i]
     idx = findall(V .== x)[1]
     η = (γ * epsilon_Vm) / nx
-    q = quantile(z, η)
+    q = quantile(Z, η)
     cc_VmL_min[i] = @NLconstraint(opfmodel, Σ_x[idx] <= (buses.Vmin[idx] - V) / q)
   end
   JuMP.registercon(opfmodel, :cc_VmL_min, cc_VmL_min)
