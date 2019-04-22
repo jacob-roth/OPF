@@ -36,7 +36,9 @@ function jac_z_alg_ew(opfmodel_z::AbstractArray,
                       busIdx::Dict, z_idx::Dict,
                       genbus::AbstractArray,
                       matchnumerical=true)
-    """ based on: http://schevalier.com/wp-content/uploads/2017/02/Power-Flow-and-Covariance-Matrix.pdf """
+    """ based on: http://schevalier.com/wp-content/uploads/2017/02/Power-Flow-and-Covariance-Matrix.pdf
+        to be phased out
+    """
     ## setup
     #### dimensions
     ngen = length(z_idx[:Pg]); @assert(ngen == length(z_idx[:Qg]))
@@ -100,20 +102,19 @@ function jac_z_alg_ew(opfmodel_z::AbstractArray,
     end
 end
 
-function jac_z_alg(opfmodel_z::AbstractArray,
-                   Y::AbstractArray,
-                   BusIdx::Dict, BusGenerators::Array{Array{Int64,1},1}, z_idx::Dict, m_idx::Dict,
+function jac_z_alg(opfmodel_z::AbstractArray, Y::AbstractArray,
+                   BusIdx::Dict, BusGenerators::Array{Array{Int64,1},1}, m_idx::Dict,
                    matchnumerical=true)
     ## setup
     #### dimensions
-    ngen = length(z_idx[:Pg]); @assert(ngen == length(z_idx[:Qg]))
-    nbus = length(z_idx[:Vm]); @assert(nbus == length(z_idx[:Va]))
+    ngen = length(m_idx[:Pg]); @assert(ngen == length(m_idx[:Qg]))
+    nbus = length(m_idx[:Vm]); @assert(nbus == length(m_idx[:Va]))
     @assert(length(opfmodel_z) == 2ngen + 2nbus + 2nbus)
     #### data
     G = real.(Y)
     B = imag.(Y)
-    Vm = opfmodel_z[z_idx[:Vm]]
-    Va = opfmodel_z[z_idx[:Va]]
+    Vm = opfmodel_z[m_idx[:Vm]]
+    Va = opfmodel_z[m_idx[:Va]]
     dP_dPg = zeros(nbus, ngen); dP_dQg = zeros(nbus, ngen)
     dP_dVm = zeros(nbus, nbus)
     dP_dVa = zeros(nbus, nbus)
@@ -168,6 +169,7 @@ function jac_z_alg(opfmodel_z::AbstractArray,
     dF = Dict()
     dF[:dF_dx] = J[m_idx[:F], m_idx[:x]]
     dF[:dF_dy] = J[m_idx[:F], m_idx[:y]]
+    dF[:dF_dd] = J[m_idx[:F], m_idx[:d]]
 
     ## return
     if matchnumerical == true

@@ -273,6 +273,52 @@ function model_idx(opfdata::OPFData)
   ## partition variables
   b_RGL_idx, g_RGL_idx = RGL_idx(opfdata)
   #### unknown
+  x = [Vm[b_RGL_idx[:L]]; Va[b_RGL_idx[:G]]; Va[b_RGL_idx[:L]]];
+  #### control
+  u = [Pg[g_RGL_idx[:G]]; Vm[b_RGL_idx[:G]]; Vm[b_RGL_idx[:R]]];
+  #### parameter
+  p = Va[b_RGL_idx[:R]];
+  #### uncertainty
+  d = [Pd; Qd];
+  #### aggregate "known"
+  y = [u; p; d];
+  #### dims
+  nx = length(x); nu = length(u); np = length(p); nd = length(d); ny = length(y)
+  xidx = [xx.col for xx in x]  ## index in model `z`
+  uidx = [xx.col for xx in u]  ## index in model `z`
+  pidx = [xx.col for xx in p]  ## index in model `z`
+  didx = [xx.col for xx in d]  ## index in model `z`
+  yidx = [xx.col for xx in y]  ## index in model `z`
+  Fidx = [b_RGL_idx[:L]; b_RGL_idx[:G]; nbus .+ b_RGL_idx[:L]]  ## index in 2nbus equations
+  idx = Dict()
+  idx[:x] = xidx
+  idx[:u] = uidx
+  idx[:p] = pidx
+  idx[:d] = didx
+  idx[:y] = yidx
+  idx[:F] = Fidx
+  idx[:Pg] = [x.col for x in getindex(opfmodel, :Pg)]
+  idx[:Qg] = [x.col for x in getindex(opfmodel, :Qg)]
+  idx[:Vm] = [x.col for x in getindex(opfmodel, :Vm)]
+  idx[:Va] = [x.col for x in getindex(opfmodel, :Va)]
+  idx[:Pd] = [x.col for x in getindex(opfmodel, :Pd)]
+  idx[:Qd] = [x.col for x in getindex(opfmodel, :Qd)]
+  return idx
+end
+function model_tilde_idx(opfdata::OPFData)
+  lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
+  BusIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
+  nbus = length(buses); nline = length(lines); ngen = length(generators); nload = length(findall(buses.bustype .== 1))
+  opfmodel = Model(solver=IpoptSolver(print_level=0))
+  @variable(opfmodel,  generators[i].Pmin  <= Pg[i=1:ngen] <= generators[i].Pmax)
+  @variable(opfmodel,  generators[i].Qmin  <= Qg[i=1:ngen] <= generators[i].Qmax)
+  @variable(opfmodel,  buses[i].Vmin       <= Vm[i=1:nbus] <= buses[i].Vmax)
+  @variable(opfmodel, -pi                  <= Va[i=1:nbus] <= pi)
+  @variable(opfmodel,  buses[i].Pd/baseMVA <= Pd[i=1:nbus] <= buses[i].Pd/baseMVA)
+  @variable(opfmodel,  buses[i].Qd/baseMVA <= Qd[i=1:nbus] <= buses[i].Qd/baseMVA)
+  ## partition variables
+  b_RGL_idx, g_RGL_idx = RGL_idx(opfdata)
+  #### unknown
   x = [Vm[b_RGL_idx[:L]]; Va[b_RGL_idx[:G]]; Va[b_RGL_idx[:L]]; Qg[g_RGL_idx[:G]]];
   #### control
   u = [Pg[g_RGL_idx[:G]]; Vm[b_RGL_idx[:G]]; Vm[b_RGL_idx[:R]]];
@@ -297,6 +343,12 @@ function model_idx(opfdata::OPFData)
   idx[:d] = didx
   idx[:y] = yidx
   idx[:F] = Fidx
+  idx[:Pg] = [x.col for x in getindex(opfmodel, :Pg)]
+  idx[:Qg] = [x.col for x in getindex(opfmodel, :Qg)]
+  idx[:Vm] = [x.col for x in getindex(opfmodel, :Vm)]
+  idx[:Va] = [x.col for x in getindex(opfmodel, :Va)]
+  idx[:Pd] = [x.col for x in getindex(opfmodel, :Pd)]
+  idx[:Qd] = [x.col for x in getindex(opfmodel, :Qd)]
   return idx
 end
 
@@ -542,9 +594,10 @@ end
 ## helpers
 ## -----------------------------------------------------------------------------
 """
-## `PQnet`: compute `Pg - Pd` net injections at each bus
+## `PQnet`: compute `Pg - Pd` net injections at each bus at an OPF solution (and thus requires `opfmodel`)
 ### arguments:
     - `opfmodel::OPFModel`: opf model
+    - `opfdata::OPFData`: opf data
 ### returns:
     - `values::Dict`: dictionary of partitioned values in `OPFModel`'s order
 """
@@ -555,8 +608,8 @@ function PQnet(opfmodel, opfdata::OPFData)
     Qd = opfdata.buses.Qd ./ 100.0
     Pg = zeros(nbus)
     Qg = zeros(nbus)
-    Pg[opfdata.generators.bus] = opfdata.generators.Pg
-    Qg[opfdata.generators.bus] = opfdata.generators.Qg
+    # Pg[opfdata.generators.bus] = opfdata.generators.Pg
+    # Qg[opfdata.generators.bus] = opfdata.generators.Qg
     Pg[opfdata.generators.bus] = getvalue(opfmodel.m[:Pg])
     Qg[opfdata.generators.bus] = getvalue(opfmodel.m[:Qg])
     Pnet = Pg - Pd
