@@ -36,7 +36,7 @@ end
 function get_Gamma_fd(z::AbstractArray, Y::AbstractArray,
                       Pnet::AbstractArray, Qnet::AbstractArray, m_idx::Dict,
                       BusIdx::Dict, BusGenerators,
-                      epsilon::Float64, verb::Int64=1)
+                      epsilon::Float64=1e-3, verb::Int64=1)
     ## setup
     x = deepcopy(z[m_idx[:x]])
     nz = length(z)
@@ -47,6 +47,7 @@ function get_Gamma_fd(z::AbstractArray, Y::AbstractArray,
     #### output
     Γ_fd = fill(NaN, nx, nd)
     xs = fill(NaN, nx, nd)
+    convgs = fill(NaN, nd)
 
     ## compute
     for i in 1:nd
@@ -72,7 +73,9 @@ function get_Gamma_fd(z::AbstractArray, Y::AbstractArray,
         PFE_wrap!(F, x) = PFE!(F, x, z_, Y, Pnet_, Qnet_, m_idx)
         PFE_J_wrap!(J, x) = PFE_J!(J, x, z_, Y, Pnet_, Qnet_, m_idx, BusIdx, BusGenerators)
         sol = nlsolve(PFE_wrap!, PFE_J_wrap!, x_, iterations=5_000, ftol=epsilon/100)
+        # sol = nlsolve(PFE_wrap!, PFE_J_wrap!, x_, iterations=5_000, ftol=1e-7)
         @info sol.f_converged == true
+        convgs[i] = (sol.f_converged == true)
         xs[:,i] = sol.zero
         if verb >= 1
             println("     NaNs:  ", sum(isnan.((xs[:,i] - x) ./ epsilon)))
@@ -80,5 +83,6 @@ function get_Gamma_fd(z::AbstractArray, Y::AbstractArray,
         end
         Γ_fd[:,i] = (xs[:,i] - x) / epsilon
     end
+    println("Solutions Converged: $(Int(sum(convgs))) / $(nd)")
     return Γ_fd
 end

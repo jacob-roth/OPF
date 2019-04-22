@@ -24,8 +24,8 @@ data[:BusGenerators] = opfdata.BusGenerators
 Γ_fd  = OPF.get_Gamma(sm_zbar, data, :fd, epsilon)
 
 ## test
-@test norm(Γ_alg - Γ_fd) <= 10*tol
+@test norm(Γ_alg - Γ_fd) <= epsilon
 for i = 1:length(m_idx[:x])
-    @test norm(Γ_alg[:,i] - Γ_fd[:,i]) <= tol
+    @test norm(Γ_alg[:,i] - Γ_fd[:,i]) <= epsilon
 end
 end # testset
