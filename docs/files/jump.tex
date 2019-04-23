@@ -1,0 +1,33 @@
+The \verb|JuMP| model implements single chance constraints of the form \cref{eq:de} for voltage magnitude at load buses in a few steps.
+\begin{enumerate}
+	\item Represent $\Gamma$ as an array variable
+	\item Impose the constraint $\frac{\partial f}{\partial x} \Gamma + \frac{\partial f}{\partial y} + \zeta = 0$ entry-wise (where $\zeta$ is an optional parameter which relaxes the relationship and is penalized in $\ell_2$ in the objective)
+	\item Compute $\hat{\Sigma}_x \coloneqq \Gamma \Sigma_y \Gamma^{\top}$ in $d$-space (only the diagonal elements)
+	\item Assume $\bar{V}^i \coloneqq V^i$ for $i \in L$ in \cref{eq:de}
+\end{enumerate}
+The function \verb|cc_acopf_model| creates a CC-ACOPF model from MPC data and the following parameters:
+\begin{itemize}
+	\item \verb|options|: 
+	\begin{itemize}
+		\item \verb|lossless|: binary option to remove $G$ part of $Y$
+		\item \verb|current_rating|: binary option to compute line limits based on current (true) or apparent power (false)
+		\item \verb|epsilon_Vm|: chance parameter for voltage magnitude constraints
+		\item \verb|epsilon_Va|: chance parameter for voltage angle constraints
+		\item \verb|epsilon_Qg|: chance parameter for reactive generation constraints
+		\item \verb|gamma|: Bonferroni constraint adjustment factor
+		\item \verb|relax_Gamma|: binary option to introduce $\zeta$
+		\item \verb|print_level|: verbose level ($5$ is default for IPOPT)
+	\end{itemize}
+	\item \verb|data|: 
+	\begin{itemize}
+		\item \verb|Sigma_d|: covariance matrix for uncertainty parameters $P_d$ and $Q_d$
+		\item \verb|Va_min|: minimum voltage angle vector 
+		\item \verb|Va_max|: maximum voltage angle vector
+	\end{itemize}
+\end{itemize}
+
+A few notes:
+\begin{itemize}
+	\item We have validated sensitivity calcs numerically (finite-differences) in the 9bus case using \verb|NLsolve|, but for smaller $\epsilon$s, the nonlinear solver routine isn't accurate enough
+	\item 
+\end{itemize}

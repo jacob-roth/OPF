@@ -1,0 +1,77 @@
+% ----------------------------------------
+% custom math commands
+% ----------------------------------------
+
+% - - - - - - - - - - - - - - - - - - - - 
+% not requiring different packages
+% - - - - - - - - - - - - - - - - - - - - 
+\newcommand{\E}[1]{\mathbb{E} \left[ #1 \right]}
+\newcommand{\PP}[1]{\mathbb{P} \left[ #1 \right]}
+\newcommand{\var}[1]{\mathbb{V}\text{ar} \left[ #1 \right]}
+\newcommand{\cov}[1]{\mathbb{C}{ov} \left[ #1 \right]}
+\newcommand{\corr}[1]{\mathbb{C}{orr} \left[ #1 \right]}
+\newcommand{\spc}[0]{\text{ }}
+\newcommand{\R}[0]{\mathbb{R}}
+\newcommand{\C}[0]{\mathbb{C}}
+\newcommand{\Sym}[0]{\mathbb{S}}
+\newcommand{\VaR}[2]{\operatorname{VaR}_{#1} \left[ #2 \right]}
+\newcommand{\CVaR}[2]{\operatorname{CVaR}_{#1} \left[ #2 \right]}
+
+\newcommand{\sumi}{\sum_{i=1}}
+\newcommand{\sumj}{\sum_{j=1}}
+\newcommand{\sumk}{\sum_{k=1}}
+\newcommand{\prodi}{\prod_{i=1}}
+\newcommand{\prodj}{\prod_{j=1}}
+\newcommand{\prodk}{\prod_{k=1}}
+
+\newcommand{\etal}{et al. }
+\newcommand{\ie}{i.e., }
+\newcommand{\eg}{e.g., }
+
+\newcommand{\im}{\text{i}\,}
+
+\newcommand{\sgn}{\text{sgn}}
+
+% \newcommand{\note}[1]{\textcolor{red}{note: #1}}
+
+% inline equations
+\makeatletter
+\newcommand*{\inlineequation}[2][]{%
+	\begingroup
+	% Put \refstepcounter at the beginning, because
+	% package `hyperref' sets the anchor here.
+	\refstepcounter{equation}%
+	\ifx\\#1\\%
+	\else
+	\label{#1}%
+	\fi
+	% prevent line breaks inside equation
+	\relpenalty=10000 %
+	\binoppenalty=10000 %
+	\ensuremath{%
+		% \displaystyle % larger fractions, ...
+		#2%
+	}%
+	~\@eqnnum
+	\endgroup
+}
+\makeatother
+
+% - - - - - - - - - - - - - - - - - - - - 
+% requiring different packages
+% - - - - - - - - - - - - - - - - - - - - 
+\usepackage{dsfont}
+\newcommand{\ind}[1]{\mathds{1}{\{#1\}}}
+\newcommand{\one}{\mathds{1}}
+% for indicator function
+
+\usepackage{mathtools}
+% for \coloneqq :=
+
+% \usepackage{algorithm}
+% \usepackage[noend]{algpseudocode}
+% \makeatletter
+% \def\BState{\State\hskip-\ALG@thistlm}
+% \makeatother
+% % for algorithm pseudocode b-states
+

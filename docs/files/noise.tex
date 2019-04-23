@@ -1,0 +1,26 @@
+Next we introduce uncertainty to the power flow equations through the uncertain $P_d^{G \cup L}$ and $Q_d^{G \cup L}$ vectors.
+Specifically, we suppose that at time $t$, 
+\begin{subequations}
+\label{eq:stoch-load-model}
+\begin{align}
+P_d^{{G \cup L},t} &= \bar{P}_d^{{G \cup L},t} + Z_P^{{G \cup L},t} \\ 
+Q_d^{{G \cup L},t} &= \bar{Q}_d^{{G \cup L},t} + Z_Q^{{G \cup L},t}.
+\end{align}
+\end{subequations}
+where
+\begin{align}
+Z_d^{{G \cup L},t} \coloneqq
+\begin{bmatrix}
+Z_P^{{G \cup L},t} \\ Z_Q^{{G \cup L},t}
+\end{bmatrix}
+\sim N(0, \Sigma_d)
+\end{align}
+and $\bar{P}_d^{{G \cup L},t}, \bar{Q}_d^{{G \cup L},t}$ are forecast time $t$ active and reactive power demands.
+We assume that the noise can occur at any bus with a solar demand/generation component, which hypothetically could be all buses (except slack).
+
+We extend this to a distribution over all of $y$ as:
+\begin{align}
+y \sim N(\bar{y}, \Sigma_y)
+\end{align}
+where $[\Sigma_y]_{ij} = [\Sigma_d]{ij}$ for indices $i,j$ corresponding to components in $P_d$ or $Q_d$ and $[\Sigma_y]_{ij} = 0$ otherwise.
+Similarly, $\bar{y}_i$ corresponds to either elements of $\bar{P}_d$ and $\bar{Q}_d$ or the original elements of $y$ for the other components.

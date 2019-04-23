@@ -1,0 +1,106 @@
+We consider a standard power grid with $N$ total buses of the following bus types
+\begin{itemize}
+	\item Reference/slack buses ($P\theta$ known), with index set $R$	
+	\item Generator buses ($PV$ known), with index set $G$
+	\item Load buses ($PQ$ known), with index set $L$
+	\item Set of all buses $B = R \cup G \cup L$.
+\end{itemize}
+At each bus, we have the following quantities
+\begin{itemize}
+	\item $P_g^i$: controllable active power (positive values mean power is ``entering'' the bus, \ie generation) which is defined to be zero for $i \in L$
+	\item $P_d^i$: fixed active power (positive values mean power is ``leaving'' the bus, \ie demand)
+	\item $P_{\text{net}}^k \coloneqq P_g^i - P_d^i$: net active power
+	\item $Q_g^i$: controllable reactive power (positive values mean power is ``entering'' the bus, \ie generation) which is defined to be zero for $i \in L$
+	\item $Q_d^i$: fixed reactive power (positive values mean power is ``leaving'' the bus, \ie demand)
+	\item $Q_{\text{net}}^i \coloneqq Q_g^i - Q_d^i$: net reactive power
+	\item $V^i$: voltage magnitude at bus $i$
+	\item $\theta^i$: voltage angle at bus $i$.
+\end{itemize}
+By the assumption that there is no controllable active/reactive power at the load buses, we can determine $P_{\text{net}}^L$ and $Q_{\text{net}}^L$ from the outset.
+Next, we collect the known quantities into the vector $y$ composed of controllable variables $u$, fixed parameters $p$, and uncertain (solar demand/generation) parameters $d$:
+\begin{align}
+y \coloneqq
+\begin{bmatrix}
+P_{g}^G \\ V^G \\ V^R \\ \theta^R \\ P_{d}^L \\ Q_{d}^L \\ P_d^G \\ Q_d^G
+\end{bmatrix}
+=
+\begin{bmatrix}
+u \\ p \\ d
+\end{bmatrix}, \quad
+u \coloneqq
+\begin{bmatrix}
+P_{g}^G \\ V^G
+\end{bmatrix}, \quad
+p \coloneqq
+\begin{bmatrix}
+V^R \\ \theta^R
+\end{bmatrix}, \quad
+d \coloneqq
+\begin{bmatrix}
+P_{d}^L \\ Q_{d}^L \\ P_d^G \\ Q_d^G
+\end{bmatrix}, \quad
+\end{align}
+and the unknown quantities into the vector $x$:
+\begin{align}
+x \coloneqq
+\begin{bmatrix}
+V^L \\ \theta^L \\ \theta^G
+\end{bmatrix}.
+\end{align}
+Three notes:
+\begin{itemize}
+	\item we say that the components corresponding to $P_d$ and $Q_d$ exist in ``uncertainty space'' $d$ since they capture the potential solar contributions
+	\item we have not included $Q_{g}^{G \cup R}$ as an unknown since reactive generation can be computed once the unknown voltage magnitude and angle quantities are determined. However, we denote the augmented unknown space by $\tilde{x}$ so that:
+	\begin{align}
+	\tilde{x} \coloneqq
+	\begin{bmatrix}
+	Q_g^G \\ Q_g^R \\ V^L \\ \theta^L \\ \theta^G
+	\end{bmatrix}
+	\end{align}
+	\item we denote the (unordered) set of all values by $z \coloneqq (x,y)$.
+\end{itemize}
+
+At each bus, we also have two power balance equations represented as:
+\begin{subequations}
+\begin{align}
+P^i(\theta, V) - P_{\text{net}}^i = 0 ,\quad i = 1,\ldots,N \\
+Q^i(\theta, V) - Q_{\text{net}}^i = 0 ,\quad i = 1,\ldots,N
+\end{align}
+\end{subequations}
+where
+\begin{subequations}
+\begin{align}
+P^i(\theta, V) \coloneqq V^i \sum_{k=1}^N V^k \left( G_{ik} \cos(\theta^{ik}) + B_{ik}\sin(\theta^{ik}) \right) \\
+Q^i(\theta, V) \coloneqq V^i \sum_{k=1}^N V^k \left( G_{ik} \sin(\theta^{ik}) - B_{ik}\cos(\theta^{ik}) \right) 
+\end{align}
+\end{subequations}
+and we have defined $\theta^{ik} \coloneqq \theta^i - \theta^k$ for convenience.
+As is traditional, we consider a reduced system where we select $2|L| + |G|$ power flow equations to match the $2|L| + G$ unknowns in $x$ and define a smaller system of nonlinear equations.
+We select a $P$ and a $Q$ power balance equation for each load bus and a $P$ power balance equation for each generator bus.
+Aggregating the power balance expressions in our notation \cite{Dommel1968}, the vector function can be represented as
+\begin{align}
+F(x,y) = F(x; u, p) \coloneqq
+\begin{bmatrix}
+P^L(x; u, p) \\ Q^L(x; u, p) \\ P^G(x; u, p)
+\end{bmatrix}.
+\end{align}
+Thus the nonlinear system can be expressed as:
+\begin{align}
+f(x; u, p) =
+\begin{bmatrix}
+P^L(x; u, p) - P^L_{\text{net}} \\
+Q^L(x; u, p) - Q^L_{\text{net}} \\
+P^G(x; u, p) - P^G_{\text{net}}
+\end{bmatrix}
+\end{align}
+where a power flow solution point $\bar{x}$ is such that $f(\bar{x}; u, p) = 0$.
+Note that this can be extended to include reactive power generation (as noted above) as an unknown explicitly by including it in $\tilde{x}$ and adding considering the augmented system of equations:
+\begin{align}
+\tilde{f}(\tilde{x}; u, p) =
+\begin{bmatrix}
+P^L(\tilde{x}; u, p) - P^L_{\text{net}} \\
+Q^L(\tilde{x}; u, p) - Q^L_{\text{net}} \\
+P^G(\tilde{x}; u, p) - P^G_{\text{net}} \\
+Q^G(\tilde{x}; u, p) - Q^G_{\text{net}}
+\end{bmatrix}.
+\end{align}

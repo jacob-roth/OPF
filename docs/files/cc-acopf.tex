@@ -1,0 +1,95 @@
+We wish to solve \cref{eq:acopf} subject to solar uncertainty and ensure that the operating point will remain ``stable'' to solar fluctuations.
+To do this, we encode the uncertainty into the problem via chance constraints.
+
+By the implicit function theorem, at a power flow solution point $\bar{x}$ for given $y$, we have an implicit function $g: \R^{|y|}\to\R^{|x|}$ such that $f(g(y), y) = 0$ in a region around a power flow point.
+We compute the first two terms in the Taylor series of $g$ from the implicit function theorem:
+\begin{align}
+g(\hat{y}) \approx g(y) + \left[ -\left[ \frac{\partial f}{\partial x} \right]^{-1} \left[ \frac{\partial f}{\partial y} \right] \right] (\hat{y} - y) \implies \hat{x} \approx x + \Gamma (\hat{y} - y)
+\end{align}
+where $\Gamma$ is the ``sensitivity'' or Jacobian of the implicit function $g$ which is obtained via the chain rule.
+Explicitly, denote the power flow solution as the particular point $(\bar{\chi}, \gamma)$ so that:
+\begin{align}
+f(\bar{\chi}, \gamma) &\coloneqq f(x,y) \bigr \lvert_{(\bar{\chi}, \gamma)} = f(g(y), y) = 0, \quad \text{for some } y \in B(\gamma) \\
+\frac{{\rm d}}{{\rm d}y} f &= \frac{{\partial} f}{{\partial}y} \frac{{\rm d}y}{{\rm d}y} + \frac{{\partial} f}{{\partial}x} \frac{{\rm d}x}{{\rm d}y} = \frac{{\rm d}}{{\rm d}y} 0 = 0 \\
+&\implies \frac{{\rm d}x}{{\rm d}y} = \frac{{\rm d}g(y)}{{\rm d}y} \coloneqq \Gamma = -\left[ \frac{{\partial} f}{{\partial}x} \right]^{-1} \frac{{\partial} f}{{\partial}y}.
+\end{align}
+
+Since the functional constraints in $\mathcal{B}$ can be expressed as $h(x, y) = h(g(y), y) \coloneqq g(y) \leq 0$, we propagate the uncertainty in $y$ (in particular, $P_d, Q_d$) through $g$ as follows:
+\begin{align}
+\hat{y} &\sim N(\bar{y},\, \Sigma_y) \\
+\hat{x} &\approx \bar{x} + \Gamma (\hat{y} - \bar{y}) \\
+\E{\hat{x}} &= \bar{x} \\
+\text{Var}(\hat{x}) &= \Sigma_x \coloneqq \Gamma \Sigma_y \Gamma^{\top} \\
+\implies \hat{x} &\sim N(\bar{x},\, \Sigma_x)
+\end{align}
+since the linear transformation preserves Gaussianity and we evaluate the Taylor approximation at $\bar{y}$.
+The OPF problem imposes restrictions on $u$ through the power flow equation constraints and explicit inequalities.
+Without $d$ uncertainty, we could enforce $\mathcal{B}$ explicitly.
+To account for the uncertainty due to $d$ we consider chance constraints based on the distribution of $x$.
+Based on our proposed uncertainty structure, $\Sigma_y$ is degenerate in the entries corresponding to non-uncertainty components.
+This allows for a more efficient computation of $\Sigma_x$ which only relies on the columns of $\Gamma$ that correspond to the uncertainty space of $y$:
+\begin{align}
+\Sigma_x = \Gamma \texttt{[:,d]} \, \Sigma_d \, \Gamma\texttt{[:,d]}^{\top}
+\end{align}
+where $\Gamma\texttt{[:,d]}$ is denotes the $d$ columns $\Gamma$ corresponding to the uncertainty space of $y$.
+
+To encode functional constraints $\mathcal{B}$ probabilistically, we formulate standard joint chance constraints of the form:
+\begin{align}
+\label{eq:joint-cc}
+\mathbb{P}\left[ V^L \leq V_{\max}^L \right] \geq 1-\epsilon \\
+\mathbb{P}\left[ V^L \geq V_{\min}^L \right] \geq 1-\epsilon
+\end{align}
+for each component of $x$.
+It is difficult to represent deterministic equivalents of \cref{eq:joint-cc} in a computationally tractable way, so we make two simplifying assumptions:
+\begin{enumerate}
+	\item each component of $x$ is independent ($\hat{\Sigma}_x \coloneqq \text{diag}\left( \Sigma_x \right)$ is the covariance matrix we will use)
+	\item instead of enforcing the joint chance constraint, we use a conservative Bonferroni approximation to enforce a collection of single chance constraints.
+\end{enumerate}
+The first assumption allows for decomposing the joint CDF into a product of univariate CDFs:
+\begin{align}
+\prod_{i} \mathbb{P} \left[ V^i \leq V_{\max}^i \right]  \geq 1 - \frac{\epsilon_V}{|L|}
+\end{align}
+but this is still difficult to work with.
+The second assumption relaxes the computation into individual components for which deterministic-equivalent constraints are standard, for example:
+\begin{subequations}
+\label{eq:de}
+\begin{align}
+\mathbb{P} \left[ V^i \leq V_{\max}^i  \right] &= \mathbb{P} \left[ \frac{V^i - \bar{V}^i}{[\hat{\Sigma}_x]_{V^iV^i}} \leq \frac{V_{\max}^i - \bar{V}^i}{[\hat{\Sigma}_x]_{V^iV^i}} \right] = \Phi \left( \frac{V_{\max}^i - \bar{V}^i}{[\hat{\Sigma}_x]_{V^iV^i}} \right) \\
+\mathbb{P} \left[ V^i \leq V_{\max}^i  \right] &\geq 1 - \frac{\epsilon_V}{|L|} \\
+&\iff \Phi \left( \frac{V_{\max}^i - \bar{V}^i}{[\hat{\Sigma}_x]_{V^iV^i}} \right) \geq 1 - \frac{\epsilon_V}{|L|} \\
+&\iff V_{\max}^i - \bar{V}^i \geq \Phi^{-1}\left( 1 - \frac{\epsilon_V}{|L|} \right) [\hat{\Sigma}_x]_{V^iV^i} \\
+&\iff [\hat{\Sigma}_x]_{V^iV^i} \leq \frac{V_{\max}^i - \bar{V}^i}{\Phi^{-1}\left( 1 - \frac{\epsilon_V}{|L|} \right)}
+\end{align}
+\end{subequations}
+where $[\hat{\Sigma}_x]_{V^iV^i} = \Gamma_i \hat{\Sigma_y} \Gamma_i$.
+Such constraints indirectly constrain the sensitivity of $x$.
+
+Thus, the CC-ACOPF we consider takes the form:
+\begin{subequations}
+	\label{eq:cc-acopf}
+	\begin{alignat}{3}
+	\underset{P_g^G, V^G}{\min} & \quad && C(P_g^G) \\
+	\text{s.t.} && \quad & f\left(x; u, p \right) = 0 \\
+	&&& \theta^R \coloneqq 0, \quad P^R (x; u, p) \coloneqq P_{\text{net}}^R \\
+	&&& \mathcal{A} =
+	\begin{cases}
+	V_{\min} \leq V^G \leq V_{\max} \\
+	V_{\min} \leq V^R \leq V_{\max}
+	\end{cases}\\
+	&&& \mathcal{B} =
+	\begin{cases}
+	\mathbb{P} \left[ V_{\min}^i \leq V^{i} \right]  \geq 1 - \frac{\epsilon_V}{|L|}, \quad i \in L\\
+	\mathbb{P} \left[ V_{\max}^i \geq V^{i} \right]  \geq 1 - \frac{\epsilon_V}{|L|}, \quad i \in L\\
+	\mathbb{P} \left[ \theta_{\min} \leq \theta^{i} \right] \geq 1 - \frac{\epsilon_{\theta}}{|L|+|G|}, \quad i \in L \cup G \\
+	\mathbb{P} \left[ \theta_{\max} \geq \theta^{i} \right] \geq 1 - \frac{\epsilon_{\theta}}{|L|+|G|}, \quad i \in L \cup G
+	\end{cases}
+	\end{alignat}
+\end{subequations}
+and its deterministic equivalent reformulates the $\mathcal{B}$ constraints like \cref{eq:de}.
+
+\subsection*{Alternative Approach}
+Note that an alternative approach would perhaps be to constraint quantities in Mahalonobis distance like:
+\begin{align}
+[\theta^{L \cup G}]^{\top} [\Sigma_x]_{\theta_{L\cup G}}^{-1} \theta^{L \cup G} \leq \chi^2_{{|L|+|G|}}\left( \frac{\epsilon_{\theta}}{|L|+|G|} \right)
+\end{align}
+but we will not focus on this for now.

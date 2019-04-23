@@ -1,0 +1,28 @@
+The standard ACOPF problem has various formulations, and we will consider the following:
+\begin{subequations}
+\label{eq:acopf}
+\begin{alignat}{3}
+\underset{P_g^G, V^G}{\min} & \quad && C(P_g^G) \\
+\text{s.t.} && \quad & f\left(\overset{x}{\overbrace{(V^L, \theta^L, \theta^G)}};\, \overset{u}{\overbrace{(P_g^G, V^G)}},\, \overset{p}{\overbrace{(V^R, \theta^R, P_{d}^L, Q_{d}^L, P_{d}^G, Q_{d}^G)}} \right) = 0 \\
+&&& \theta^R \coloneqq 0, \quad P^R (x; u, p) \coloneqq P_{\text{net}}^R \\
+&&& \mathcal{A} =
+\begin{cases}
+V_{\min} \leq V^G \leq V_{\max} \\
+V_{\min} \leq V^R \leq V_{\max}
+\end{cases}\\
+&&& \mathcal{B} =
+\begin{cases}
+V_{\min} \leq V^L \leq V_{\max} \\
+\theta_{\min} \leq \theta^{L} \leq \theta_{\max} \\
+\theta_{\min} \leq \theta^{G} \leq \theta_{\max}
+\end{cases}
+\end{alignat}
+\end{subequations}
+for cost function $C: \R^{|G|}\to\R$, explicit inequalities (on control variables) $\mathcal{A}$, and functional inequalities $\mathcal{B}$.
+The distinction between explicit and functional inequalities \cite{Dommel1968} is that explicit inequalities are represented on the control variables directly while functional inequalities take the form:
+$$
+h(x,y) \leq 0
+$$
+where $x$ is an implicit function of $u$ via the power balance constraint.
+Note that this formulation can be extended to handle functional inequalities on reactive power generation if we extend $f$ to include the remaining $Q^G$ equations and extending $x$ to include $Q_g^{G\cup R}$.
+We will take this up in a later section.

@@ -1,0 +1,43 @@
+\documentclass[notitlepage]{article}
+
+%%%%%%%% setup %%%%%%%%
+\input{files/shortcuts}
+\input{config.tex}
+
+%%%%%%%% document %%%%%%%%
+\begin{document}
+
+% title
+%------------------------------------------------
+\title{Chance Constrained ACOPF} 
+% \author[Roth, J.]{Mihai Anitescu, David Barajas-Solano, Adrian Maldonado, Jake Roth, Panos Stinis, Anirudh Subramanyam, Jonathan Weare} 
+\date{April 19, 2019}
+\maketitle
+%------------------------------------------------
+
+% files
+%------------------------------------------------
+	\input{files/abstract.tex}
+	
+	\section{Introduction} 
+	\input{files/introduction.tex}
+	
+	\section{Noise Model}
+	\input{files/noise.tex}	
+	
+	\section{ACOPF Model}
+	\input{files/acopf.tex}	
+
+	\section{CC-ACOPF Model}
+	\input{files/cc-acopf.tex}	
+
+	\section{JuMP Model}
+	\input{files/jump.tex}	
+
+%------------------------------------------------
+
+%%%%%%%% references %%%%%%%%
+\bibliographystyle{abbrv}
+\bibliography{files/refs}
+
+\end{document}
