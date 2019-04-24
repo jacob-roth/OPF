@@ -1,4 +1,4 @@
-function acopf_model(opf_data, options::Dict=Dict())
+function acopf_model(opfdata, options::Dict=Dict())
   # parse options
   lossless = haskey(options, :lossless) ? options[:lossless] : false
   current_rating = haskey(options, :current_rating) ? options[:current_rating] : false
@@ -9,8 +9,8 @@ function acopf_model(opf_data, options::Dict=Dict())
   end
 
   # shortcuts for compactness
-  lines = opf_data.lines; buses = opf_data.buses; generators = opf_data.generators; baseMVA = opf_data.baseMVA
-  busIdx = opf_data.BusIdx; FromLines = opf_data.FromLines; ToLines = opf_data.ToLines; BusGeners = opf_data.BusGenerators;
+  lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
+  busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
   nbus = length(buses); nline = length(lines); ngen  = length(generators)
 
   # branch admitances
@@ -32,10 +32,10 @@ function acopf_model(opf_data, options::Dict=Dict())
 
   #fix the voltage angle at the reference bus
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")
-    fix(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va; force = true)
+    fix(Va[opfdata.bus_ref], buses[opfdata.bus_ref].Va; force = true)
   else
-    setlowerbound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
-    setupperbound(Va[opf_data.bus_ref], buses[opf_data.bus_ref].Va)
+    setlowerbound(Va[opfdata.bus_ref], buses[opfdata.bus_ref].Va)
+    setupperbound(Va[opfdata.bus_ref], buses[opfdata.bus_ref].Va)
   end
 
   @NLobjective(opfmodel, Min, sum( generators[i].coeff[generators[i].n-2]*(baseMVA*Pg[i])^2
