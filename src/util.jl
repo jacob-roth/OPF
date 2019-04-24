@@ -21,49 +21,49 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
 end
 function acopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acopf_solve(M.m, opfdata)..., M.kind); end
 
-function cc_acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict)
-
-  #
-  # initial point - needed especially for pegase cases
-  #
-  ## standard model
-  sm = OPF.s_acopf_model(opfdata)
-  sm = OPF.acopf_solve(sm, opfdata)
-  sm_eval = setup(sm.m);               ## stochastic model evaluator
-  sm_zbar = deepcopy(sm_eval.last_x);  ## stochastc model equilibrium z̄
-
-  ## set OPF variables
-  println("Setting initial point for CC-ACOPF.")
-  Pg_bar = getvalue(getindex(sm.m, :Pg))
-  Qg_bar = getvalue(getindex(sm.m, :Qg))
-  Vm_bar = getvalue(getindex(sm.m, :Vm))
-  Va_bar = getvalue(getindex(sm.m, :Va))
-  Pd_bar = getvalue(getindex(sm.m, :Pd))
-  Qd_bar = getvalue(getindex(sm.m, :Qd))
-  setvalue(getindex(opfmodel, :Pg), Pg_bar)
-  setvalue(getindex(opfmodel, :Qg), Qg_bar)
-  setvalue(getindex(opfmodel, :Vm), Vm_bar)
-  setvalue(getindex(opfmodel, :Va), Va_bar)
-  setvalue(getindex(opfmodel, :Pd), Pd_bar)
-  setvalue(getindex(opfmodel, :Qd), Qd_bar)
-
-  ## set sensitivitites
-  Y = computeAdmittanceMatrix(opfdata)
-  m_idx = OPF.model_idx(opfdata, options[:xtilde])
-  Γ = OPF.get_Gamma_ew(sm_zbar, Y, opfdata.BusIdx, opfdata.BusGenerators, m_idx, options[:Gamma_type])
-  setvalue(getindex(opfmodel, :Gamma), Γ)
-  if :zeta in keys(opfmodel.objDict); ζ = zeros(size(Γ)); setvalue(getindex(opfmodel, :zeta), ζ); end
-  println("Set initial point for CC-ACOPF.")
-
-  status = :IpoptInit
-  status = solve(opfmodel)
-
-  if status != :Optimal
-    println("Could not solve the model to optimality.")
-  end
-  return opfmodel, status
-end
-function cc_acopf_solve(M::OPFModel, opfdata::OPFData, options::Dict); return OPFModel(cc_acopf_solve(M.m, opfdata, options)..., M.kind); end
+# function cc_acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict)
+#
+#   #
+#   # initial point - needed especially for pegase cases
+#   #
+#   ## standard model
+#   sm = OPF.s_acopf_model(opfdata)
+#   sm = OPF.acopf_solve(sm, opfdata)
+#   sm_eval = setup(sm.m);               ## stochastic model evaluator
+#   sm_zbar = deepcopy(sm_eval.last_x);  ## stochastc model equilibrium z̄
+#
+#   ## set OPF variables
+#   println("Setting initial point for CC-ACOPF.")
+#   Pg_bar = getvalue(getindex(sm.m, :Pg))
+#   Qg_bar = getvalue(getindex(sm.m, :Qg))
+#   Vm_bar = getvalue(getindex(sm.m, :Vm))
+#   Va_bar = getvalue(getindex(sm.m, :Va))
+#   Pd_bar = getvalue(getindex(sm.m, :Pd))
+#   Qd_bar = getvalue(getindex(sm.m, :Qd))
+#   setvalue(getindex(opfmodel, :Pg), Pg_bar)
+#   setvalue(getindex(opfmodel, :Qg), Qg_bar)
+#   setvalue(getindex(opfmodel, :Vm), Vm_bar)
+#   setvalue(getindex(opfmodel, :Va), Va_bar)
+#   setvalue(getindex(opfmodel, :Pd), Pd_bar)
+#   setvalue(getindex(opfmodel, :Qd), Qd_bar)
+#
+#   ## set sensitivitites
+#   Y = computeAdmittanceMatrix(opfdata)
+#   m_idx = OPF.model_idx(opfdata, options[:xtilde])
+#   Γ = OPF.get_Gamma_ew(sm_zbar, Y, opfdata.BusIdx, opfdata.BusGenerators, m_idx, options[:Gamma_type])
+#   setvalue(getindex(opfmodel, :Gamma), Γ)
+#   if :zeta in keys(opfmodel.objDict); ζ = zeros(size(Γ)); setvalue(getindex(opfmodel, :zeta), ζ); end
+#   println("Set initial point for CC-ACOPF.")
+#
+#   status = :IpoptInit
+#   status = solve(opfmodel)
+#
+#   if status != :Optimal
+#     println("Could not solve the model to optimality.")
+#   end
+#   return opfmodel, status
+# end
+# function cc_acopf_solve(M::OPFModel, opfdata::OPFData, options::Dict); return OPFModel(cc_acopf_solve(M.m, opfdata, options)..., M.kind); end
 
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
