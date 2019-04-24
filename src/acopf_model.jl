@@ -93,6 +93,12 @@ function acopf_model(opf_data, options::Dict=Dict())
           - flowmax <=0)
       end
 
+      ## skip to-bus current limit: lossless ==> symmetric & current ==> same as from
+      ## if current_rating == false, then they are different constraints bc Vm-to vs Vm-from
+      if lossless && current_rating
+        continue
+      end
+
       #branch apparent power limits (to bus); OR current limit (Anirudh)
       Ytf_abs2=YtfR[l]^2+YtfI[l]^2; Ytt_abs2=YttR[l]^2+YttI[l]^2
       Yre=YtfR[l]*YttR[l]+YtfI[l]*YttI[l]; Yim=-YtfR[l]*YttI[l]+YtfI[l]*YttR[l]
