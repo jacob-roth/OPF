@@ -1,6 +1,6 @@
 module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
-using SparseArrays, LinearAlgebra, Distributions, NLsolve
+using SparseArrays, LinearAlgebra, NLsolve
 using MPCCases
 using Printf
 using Pkg
@@ -19,12 +19,8 @@ export acopf_model
 include("s_acopf_model.jl")
 export s_acopf_model
 
-include("cc_acopf_model.jl")
-export cc_acopf_model
-
 include("util.jl")
 export acopf_solve, acopf_initialPt_IPOPT
-export cc_acopf_solve
 export acopf_outputAll, get_values
 export RGL_id, RGL_idx, model_idx
 export PQnet
