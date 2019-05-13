@@ -51,7 +51,7 @@ end
 ## -----------------------------------------------------------------------------
 ## reporting
 ## -----------------------------------------------------------------------------
-function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.OPFData)
+function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.OPFData, lossless::Bool=false)
   #shortcuts for compactness
   lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
   busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
@@ -122,11 +122,11 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
     for l in 1:nline
       if lines[l].rateA!=0 && lines[l].rateA<1.0e10
         flowmax=(lines[l].rateA/baseMVA)^2
-        idx = 2nbus + 2nlim + 1
+        idx = lossless == false ? 2nbus + 2nlim + 1 : 2nbus + nlim + 1
 
         if( (consRhs[idx]+flowmax)  >= (1-within/100)^2*flowmax )
           @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx]+flowmax)/flowmax))
-        elseif( (consRhs[idx + 1]+flowmax)  >= (1-within/100)^2*flowmax )
+        elseif( ((consRhs[idx + 1]+flowmax)  >= (1-within/100)^2*flowmax) && (lossless == false))
           @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx + 1]+flowmax)/flowmax))
         end
         nlim += 1
