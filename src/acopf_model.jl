@@ -3,6 +3,7 @@ function acopf_model(opf_data, options::Dict=Dict())
   lossless = haskey(options, :lossless) ? options[:lossless] : false
   current_rating = haskey(options, :current_rating) ? options[:current_rating] : false
   remove_Bshunt = haskey(options, :remove_Bshunt) ? options[:remove_Bshunt] : false
+  remove_tap = haskey(options, :remove_tap) ? options[:remove_tap] : false
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -11,10 +12,11 @@ function acopf_model(opf_data, options::Dict=Dict())
   # shortcuts for compactness
   lines = opf_data.lines; buses = opf_data.buses; generators = opf_data.generators; baseMVA = opf_data.baseMVA
   busIdx = opf_data.BusIdx; FromLines = opf_data.FromLines; ToLines = opf_data.ToLines; BusGeners = opf_data.BusGenerators;
-  nbus = length(buses); nline = length(lines); ngen  = length(generators)
+  nbus = length(buses); nline = length(lines); ngen = length(generators)
 
   # branch admitances
-  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA; lossless=lossless, remove_Bshunt=remove_Bshunt)
+  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA;
+                                                      lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
 
   #
   # model

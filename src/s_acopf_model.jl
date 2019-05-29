@@ -2,6 +2,8 @@ function s_acopf_model(opf_data, options::Dict=Dict())
   # parse options
   lossless = haskey(options, :lossless) ? options[:lossless] : false
   current_rating = haskey(options, :current_rating) ? options[:current_rating] : false
+  remove_Bshunt = haskey(options, :remove_Bshunt) ? options[:remove_Bshunt] : false
+  remove_tap = haskey(options, :remove_tap) ? options[:remove_tap] : false
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -14,7 +16,8 @@ function s_acopf_model(opf_data, options::Dict=Dict())
   # @assert(nload + ngen == nbus); NOT assert bc some buses can have more than one generator...
 
   # branch admitances
-  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA)
+  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA;
+                                                      lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
 
   #
   # model
@@ -94,7 +97,7 @@ function s_acopf_model(opf_data, options::Dict=Dict())
               	)
                 - flowmax <=0)
       end
-      
+
       ## skip to-bus current limit: lossless ==> symmetric & current ==> same as from
       ## if current_rating == false, then they are different constraints bc Vm-to vs Vm-from
       if lossless && current_rating
