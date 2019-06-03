@@ -107,7 +107,7 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
     d = JuMP.NLPEvaluator(opfmodel)
     MathProgBase.initialize(d, [:Jac])
     if kind == :D
-      if options[:current_rating] == true
+      if current_rating == true
         consRhs = zeros(2*nbus+nflowlim)
       else
         consRhs = zeros(2*nbus+2*nflowlim)
