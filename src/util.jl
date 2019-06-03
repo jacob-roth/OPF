@@ -136,6 +136,8 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
         end
 
         if ( (consRhs[idx]+flowmax)  >= (1-within/100)^2*flowmax )
+          ## NOTE: printing precision for low line limits may be > 100% b/c IPOPT tolerance.
+          ## E.g., IPOPT may give rhs > flowmax by 0.00XXX% due to solution precision
           @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx]+flowmax)/flowmax))
         elseif !current_rating
           if ( (consRhs[idx + 1]+flowmax)  >= (1-within/100)^2*flowmax )
