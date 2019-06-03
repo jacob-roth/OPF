@@ -51,7 +51,7 @@ end
 ## -----------------------------------------------------------------------------
 ## reporting
 ## -----------------------------------------------------------------------------
-function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.OPFData, lossless::Bool=false)
+function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.OPFData, lossless::Bool=false, current_rating::Bool=true)
   #shortcuts for compactness
   lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
   busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
@@ -123,28 +123,34 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
     # d = setup(opfmodel)
     # c!(consRhs, optvec, model=d)
 
-    @printf("================ Lines within %d pct of flow capacity ===================\n", within)
+    @printf("================ Lines within %d %% of flow capacity ===================\n", within)
     println("Line   From Bus    To Bus    At capacity")
 
-    nlim=0
+    idx = 2nbus + 1
     for l in 1:nline
       if lines[l].rateA!=0 && lines[l].rateA<1.0e10
         flowmax=(lines[l].rateA/baseMVA)^2
-        idx = (lossless == false) ? 2nbus + 2nlim + 1 : 2nbus + nlim + 1
-
-        if( (consRhs[idx]+flowmax)  >= (1-within/100)^2*flowmax )
-          @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx]+flowmax)/flowmax))
-        elseif( ((consRhs[idx + 1]+flowmax)  >= (1-within/100)^2*flowmax) && (lossless == false))
-          @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx + 1]+flowmax)/flowmax))
+        if current_rating
+          Ys = 1/((lossless ? 0.0 : lines[l].r) + lines[l].x*im);
+          flowmax/=abs(Ys)^2
         end
-        nlim += 1
+
+        if ( (consRhs[idx]+flowmax)  >= (1-within/100)^2*flowmax )
+          @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx]+flowmax)/flowmax))
+        elseif !current_rating
+          if ( (consRhs[idx + 1]+flowmax)  >= (1-within/100)^2*flowmax )
+            @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx + 1]+flowmax)/flowmax))
+          end
+        end
+        idx += current_rating ? 1 : 2
       end
     end
   end
 
   return
 end
-function acopf_outputAll(M::OPFModel, opfdata::OPFData); return acopf_outputAll(M.m, M.kind, opfdata); end
+function acopf_outputAll(M::OPFModel, opfdata::OPFData, options::Dict); return acopf_outputAll(M.m, M.kind, opfdata,
+                                                                               options[:lossless], options[:current_rating]); end
 
 ## -----------------------------------------------------------------------------
 ## indices
