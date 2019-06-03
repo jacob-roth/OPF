@@ -107,9 +107,17 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
     d = JuMP.NLPEvaluator(opfmodel)
     MathProgBase.initialize(d, [:Jac])
     if kind == :D
-      consRhs = zeros(2*nbus+2*nflowlim)
+      if options[:current_rating] == true
+        consRhs = zeros(2*nbus+nflowlim)
+      else
+        consRhs = zeros(2*nbus+2*nflowlim)
+      end
     elseif kind ==:S
-      consRhs = zeros(4*nbus+2*nflowlim)
+      if options[:current_rating] == true
+        consRhs = zeros(4*nbus+nflowlim)
+      else
+        consRhs = zeros(4*nbus+2*nflowlim)
+      end
     end
     MathProgBase.eval_g(d, consRhs, optvec)
     # d = setup(opfmodel)
@@ -122,7 +130,7 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
     for l in 1:nline
       if lines[l].rateA!=0 && lines[l].rateA<1.0e10
         flowmax=(lines[l].rateA/baseMVA)^2
-        idx = lossless == false ? 2nbus + 2nlim + 1 : 2nbus + nlim + 1
+        idx = (lossless == false) ? 2nbus + 2nlim + 1 : 2nbus + nlim + 1
 
         if( (consRhs[idx]+flowmax)  >= (1-within/100)^2*flowmax )
           @printf("%3d      %3d      %3d        %5.3f%%\n", l, lines[l].from, lines[l].to, 100*sqrt((consRhs[idx]+flowmax)/flowmax))

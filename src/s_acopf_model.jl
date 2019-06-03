@@ -68,62 +68,53 @@ function s_acopf_model(opf_data, options::Dict=Dict())
     + sum( Vm[b]*Vm[busIdx[lines[l].from]]*(-YtfI[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfR[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]   )
     - ( sum(baseMVA*Qg[g] for g in BusGeners[b]) - sum(baseMVA*Qd[l] for l in busIdx[b]) ) / baseMVA      #Sbus part
     ==0)
-  #
-  # branch/lines flow limits
-  #
-  @constraintref F_fr[1:nline]  ## from bus, TODO: won't work in JuMP v0.19
-  @constraintref F_to[1:nline]  ## to bus, TODO: won't work in JuMP v0.19
-  nlinelim=0
-  for l in 1:nline
-    if lines[l].rateA!=0 && lines[l].rateA<1.0e10
-      nlinelim += 1
-      flowmax=(lines[l].rateA/baseMVA)^2
+    #
+    # branch/lines flow limits
+    #
+    if current_rating
+      @constraintref F[1:nline]     ## all lines
+    else
+      @constraintref F_fr[1:nline]  ## from bus, TODO: won't work in JuMP v0.19
+      @constraintref F_to[1:nline]  ## to bus, TODO: won't work in JuMP v0.19
+    end
+    nlinelim=0
+    for l in 1:nline
+      if lines[l].rateA!=0 && lines[l].rateA<1.0e10
+        nlinelim += 1
+        flowmax=(lines[l].rateA/baseMVA)^2
 
-      #branch apparent power limits (from bus)
-      Yff_abs2=YffR[l]^2+YffI[l]^2; Yft_abs2=YftR[l]^2+YftI[l]^2
-      Yre=YffR[l]*YftR[l]+YffI[l]*YftI[l]; Yim=-YffR[l]*YftI[l]+YffI[l]*YftR[l]
-      if current_rating == true
-        F_fr[l] = @NLconstraint(opfmodel,
-  	              1.0 *
-                	( Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
-                	  + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
-                	)
-                  - flowmax <=0)
-      else
-      F_fr[l] = @NLconstraint(opfmodel,
-	              Vm[busIdx[lines[l].from]]^2 *
-              	( Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
-              	  + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
-              	)
-                - flowmax <=0)
-      end
+        if current_rating
+          Ys = 1/((lossless ? 0.0 : lines[l].r) + lines[l].x*im); ## NOTE: not adjusting for taps/turns adjustments
+          flowmax /= (real(Ys)^2 + imag(Ys)^2)
+          F[l] = @NLconstraint(opfmodel,
+            Vm[busIdx[lines[l].from]]^2 + Vm[busIdx[lines[l].to]]^2
+                    - 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])
+            - flowmax <= 0)
+        else
+          #branch apparent power limits (from bus)
+          Yff_abs2=YffR[l]^2+YffI[l]^2; Yft_abs2=YftR[l]^2+YftI[l]^2
+          Yre=YffR[l]*YftR[l]+YffI[l]*YftI[l]; Yim=-YffR[l]*YftI[l]+YffI[l]*YftR[l]
+          F_fr[l] = @NLconstraint(opfmodel,
+            Vm[busIdx[lines[l].from]]^2 *
+                    (
+                      Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
+                      + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+                    )
+                    - flowmax <=0)
 
-      ## skip to-bus current limit: lossless ==> symmetric & current ==> same as from
-      ## if current_rating == false, then they are different constraints bc Vm-to vs Vm-from
-      if lossless && current_rating
-        continue
-      end
-
-      #branch apparent power limits (to bus)
-      Ytf_abs2=YtfR[l]^2+YtfI[l]^2; Ytt_abs2=YttR[l]^2+YttI[l]^2
-      Yre=YtfR[l]*YttR[l]+YtfI[l]*YttI[l]; Yim=-YtfR[l]*YttI[l]+YtfI[l]*YttR[l]
-      if current_rating == true
-        F_to[l] = @NLconstraint(opfmodel,
-          	      1.0 *
-                  ( Ytf_abs2*Vm[busIdx[lines[l].from]]^2 + Ytt_abs2*Vm[busIdx[lines[l].to]]^2
-                    + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
-                  )
-                  - flowmax <=0)
-      else
-        F_to[l] = @NLconstraint(opfmodel,
-          	      Vm[busIdx[lines[l].to]]^2 *
-                  ( Ytf_abs2*Vm[busIdx[lines[l].from]]^2 + Ytt_abs2*Vm[busIdx[lines[l].to]]^2
-                    + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
-                  )
-                  - flowmax <=0)
+          #branch apparent power limits (to bus)
+          Ytf_abs2=YtfR[l]^2+YtfI[l]^2; Ytt_abs2=YttR[l]^2+YttI[l]^2
+          Yre=YtfR[l]*YttR[l]+YtfI[l]*YttI[l]; Yim=-YtfR[l]*YttI[l]+YtfI[l]*YttR[l]
+          F_to[l] = @NLconstraint(opfmodel,
+            Vm[busIdx[lines[l].to]]^2 *
+                    (
+                      Ytf_abs2*Vm[busIdx[lines[l].from]]^2 + Ytt_abs2*Vm[busIdx[lines[l].to]]^2
+                      + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+                    )
+                    - flowmax <=0)
+        end
       end
     end
-  end
   JuMP.registercon(opfmodel, :F_fr, F_fr)
   JuMP.registercon(opfmodel, :F_to, F_to)
 
