@@ -115,8 +115,13 @@ function s_acopf_model(opf_data, options::Dict=Dict())
         end
       end
     end
-  JuMP.registercon(opfmodel, :F_fr, F_fr)
-  JuMP.registercon(opfmodel, :F_to, F_to)
+    if current_rating
+      JuMP.registercon(opfmodel, :F, F)
+    else
+      JuMP.registercon(opfmodel, :F_fr, F_fr)
+      JuMP.registercon(opfmodel, :F_to, F_to)
+    end
+
 
   @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
   println("Lines with limits  ", nlinelim)

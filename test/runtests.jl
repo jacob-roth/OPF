@@ -33,6 +33,3 @@ nload = sum(opfdata.buses.bustype .== 1)
 include("test_det-sto.jl")           ## compare deterministic and "stochastic"
 include("test_compare.jl")           ## compare with Anirudh's model
 include("test_pfe.jl")               ## test power flow equation calcs (vectorized, MatPower, and entrywise)
-include("test_jacobian.jl")          ## test jacobian calcs (algebraic v numerical)
-include("test_sensitivities.jl")     ## test Γ sensitivity calcs
-include("test_cc_acopf.jl")          ## test cc-acopf model
