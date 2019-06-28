@@ -51,7 +51,7 @@ end
 ## -----------------------------------------------------------------------------
 ## reporting
 ## -----------------------------------------------------------------------------
-function OPF.acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.OPFData, lossless::Bool=false, current_rating::Bool=false)
+function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.OPFData, lossless::Bool=false, current_rating::Bool=false)
   #shortcuts for compactness
   lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
   busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
@@ -151,7 +151,7 @@ function OPF.acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCas
 
   return
 end
-function OPF.acopf_outputAll(M::OPFModel, opfdata::OPFData, options::Dict)
+function acopf_outputAll(M::OPFModel, opfdata::OPFData, options::Dict)
   cr   = haskey(options, :current_rating) ? options[:current_rating] : false
   loss = haskey(options, :lossless)       ? options[:lossless]       : false
   return acopf_outputAll(M.m, M.kind, opfdata, loss, cr)
