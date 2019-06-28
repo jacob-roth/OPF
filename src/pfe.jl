@@ -1,21 +1,21 @@
 ## -----------------------------------------------------------------------------
 ## real, entrywise
 ## -----------------------------------------------------------------------------
-function P_i(Vm::AbstractArray, Va::AbstractArray, i::Int64, Y::SparseMatrixCSC{Complex{Float64},Int64})
+function P_i(Vm::AbstractArray, Va::AbstractArray, i::Int64, Y::SparseMatrixCSC{T,Int64}) where T <: Union{Float64, Complex{Float64}}
     IDX = Y[i,:].nzind
     P = Vm[i] * sum(Vm[kk] * ( real(Y[i,kk]) * cos(Va[i]-Va[kk]) + imag(Y[i,kk]) * sin(Va[i]-Va[kk]) ) for kk in IDX)
     return P
 end
-function Q_i(Vm::AbstractArray, Va::AbstractArray, i::Int64, Y::SparseMatrixCSC{Complex{Float64},Int64})
+function Q_i(Vm::AbstractArray, Va::AbstractArray, i::Int64, Y::SparseMatrixCSC{T,Int64}) where T <: Union{Float64, Complex{Float64}}
     IDX = Y[i,:].nzind
     Q = Vm[i] * sum(Vm[kk] * ( real(Y[i,kk]) * sin(Va[i]-Va[kk]) - imag(Y[i,kk]) * cos(Va[i]-Va[kk]) ) for kk in IDX)
     return Q
 end
-function P_i(Vm::AbstractArray, Va::AbstractArray, i::Int64, Y::Array{Complex{Float64},2})
+function P_i(Vm::AbstractArray, Va::AbstractArray, i::Int64, Y::Array{T,2}) where T <: Union{Float64, Complex{Float64}}
     P = Vm[i] * sum(Vm[kk] * ( real(Y[i,kk]) * cos(Va[i]-Va[kk]) + imag(Y[i,kk]) * sin(Va[i]-Va[kk]) ) for kk in 1:size(Y,1))
     return P
 end
-function Q_i(Vm::AbstractArray, Va::AbstractArray, i::Int64, Y::Array{Complex{Float64},2})
+function Q_i(Vm::AbstractArray, Va::AbstractArray, i::Int64, Y::Array{T,2}) where T <: Union{Float64, Complex{Float64}}
     Q = Vm[i] * sum(Vm[kk] * ( real(Y[i,kk]) * sin(Va[i]-Va[kk]) - imag(Y[i,kk]) * cos(Va[i]-Va[kk]) ) for kk in 1:size(Y,1))
     return Q
 end
