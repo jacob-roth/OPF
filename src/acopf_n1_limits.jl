@@ -29,7 +29,7 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_sc
     ## display
     for l in eachindex(lines)
         println("Line   From Bus    To Bus    Rating (Orig)    Rating (New)")
-        @printf("%3d      %3d      %3d        %5.3f          %5.3f\n", l, lines.from[l], lines.to[l], ratings_0[l], lines.rateA[l])
+        @printf("%3d      %3d        %3d         %5.3f            %5.3f\n", l, lines.from[l], lines.to[l], ratings_0[l], opfdata.lines.rateA[l])
     end
     return opfdata
 end
