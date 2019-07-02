@@ -21,8 +21,8 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_sc
     ratings = deepcopy(ratings_0)
     for l in nonislanding_lines
         rl = remove_line!(opfdata, l)
-        adjust_feas_ratings!(opfdata, options, point, feas_tol, max_iter)
-        solved, M, point = adjust_solv_ratings!(opfdata, options, point, solve_scale)
+        adjust_feas_ratings!(opfdata, options, point, feas_tol)
+        solved, M, point = adjust_solv_ratings!(opfdata, options, point, solve_scale, max_iter)
         reinstate_line!(opfdata, l, rl)
     end
 
