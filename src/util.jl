@@ -1,12 +1,19 @@
 ## -----------------------------------------------------------------------------
 ## solve
 ## -----------------------------------------------------------------------------
-function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
+function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
 
   #
   # initial point - needed especially for pegase cases
   #
-  Pg0,Qg0,Vm0,Va0 = acopf_initialPt_IPOPT(opfdata)
+  if warm_point == false
+    Pg0,Qg0,Vm0,Va0 = acopf_initialPt_IPOPT(opfdata)
+  else
+    Pg0 = warm_point[:Pg]
+    Qg0 = warm_point[:Qg]
+    Vm0 = warm_point[:Vm]
+    Va0 = warm_point[:Va]
+  end
   setvalue(getindex(opfmodel, :Pg), Pg0)
   setvalue(getindex(opfmodel, :Qg), Qg0)
   setvalue(getindex(opfmodel, :Vm), Vm0)
@@ -19,7 +26,7 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData)
   end
   return opfmodel, status
 end
-function acopf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acopf_solve(M.m, opfdata)..., M.kind); end
+function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind); end
 
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)

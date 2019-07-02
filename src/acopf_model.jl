@@ -17,6 +17,7 @@ function acopf_model(opfdata, options::Dict=Dict())
   # branch admitances
   YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA;
                                                       lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
+  Y = computeAdmittanceMatrix(opfdata, options)
 
   #
   # model
@@ -81,12 +82,18 @@ function acopf_model(opfdata, options::Dict=Dict())
       flowmax=(lines[l].rateA/baseMVA)^2
 
       if current_rating
-        Ys = 1/((lossless ? 0.0 : lines[l].r) + lines[l].x*im); ## NOTE: not adjusting for taps/turns adjustments
-        flowmax /= (real(Ys)^2 + imag(Ys)^2)
-        F[l] = @NLconstraint(opfmodel,
-          Vm[busIdx[lines[l].from]]^2 + Vm[busIdx[lines[l].to]]^2
-                  - 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])
-          - flowmax <= 0)
+        #branch current flows
+        line = lines[l]
+        f = line.from
+        t = line.to
+        Y_tf = Y[t,f]
+        Y_ft = Y[f,t]
+        Vm_f = Vm[f]; Va_f = Va[f]
+        Vm_t = Vm[t]; Va_t = Va[t]
+        Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
+        ## NOTE: current from Frank & Rebennack OPF primer: eq 5.11 where turns/tap ratios are accounted for in `Y`
+        @NLexpression(opfmodel, current2, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)) * Yabs2)
+        F[l] = @NLconstraint(opfmodel, current2 <= flowmax)
       else
         #branch apparent power limits (from bus)
         Yff_abs2=YffR[l]^2+YffI[l]^2; Yft_abs2=YftR[l]^2+YftI[l]^2
