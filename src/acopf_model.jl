@@ -4,6 +4,7 @@ function acopf_model(opfdata, options::Dict=Dict())
   current_rating = haskey(options, :current_rating) ? options[:current_rating] : false
   remove_Bshunt = haskey(options, :remove_Bshunt) ? options[:remove_Bshunt] : false
   remove_tap = haskey(options, :remove_tap) ? options[:remove_tap] : false
+  pl = haskey(options, :print_level) ? options[:print_level] : 0
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -25,7 +26,7 @@ function acopf_model(opfdata, options::Dict=Dict())
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")
     opfmodel = Model(with_optimizer(Ipopt.Optimizer))
   else
-    opfmodel = Model(solver=IpoptSolver(print_level=5))
+    opfmodel = Model(solver=IpoptSolver(print_level=pl))
   end
 
   @variable(opfmodel, generators[i].Pmin <= Pg[i=1:ngen] <= generators[i].Pmax)
@@ -126,8 +127,9 @@ function acopf_model(opfdata, options::Dict=Dict())
     JuMP.registercon(opfmodel, :F_to, F_to)
   end
 
-  @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
-  println("Lines with limits  ", nlinelim)
-
+  if pl >= 1
+    @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
+    println("Lines with limits  ", nlinelim)
+  end
   return OPFModel(opfmodel, :InitData, :D)
 end
