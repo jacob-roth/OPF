@@ -26,7 +26,7 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   end
   return opfmodel, status
 end
-function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind); end
+function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind); end
 
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
