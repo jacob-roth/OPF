@@ -20,6 +20,7 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_sc
     point   = deepcopy(point_0)
     ratings = deepcopy(ratings_0)
     for l in nonislanding_lines
+        println("========== REMOVING LINE $l        ==========")
         rl = remove_line!(opfdata, l)
         adjust_feas_ratings!(opfdata, options, point, feas_tol)
         solved, M, point = adjust_solv_ratings!(opfdata, options, point, solve_scale, max_iter)
@@ -31,7 +32,7 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_sc
         println("Line   From Bus    To Bus    Rating (Orig)    Rating (New)")
         @printf("%3d      %3d        %3d         %5.3f            %5.3f\n", l, lines.from[l], lines.to[l], ratings_0[l], opfdata.lines.rateA[l])
     end
-    return opfdata
+    # return opfdata
 end
 
 function get_nonislanding_lines(opfdata::OPFData, options::Dict)
@@ -68,6 +69,7 @@ function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scal
     solved, M, _ = check_solvability(point, opfdata, options)
     iter = 1
     while solved == false && iter <= max_iter
+        println("~~~~~~~~~~ inner solve iteration $iter ~~~~~~~~~~")
         flowmag2s   = get_flowmag2s(point, opfdata, options)
         ratings     = get_ratings(flowmag2s, opfdata.baseMVA)
         adj_ratings = max.(ratings, opfdata.lines.rateA)
@@ -75,7 +77,8 @@ function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scal
         solved, M, _ = check_solvability(point, opfdata, options)
         iter += 1
         if iter == max_iter
-            @warn "Maximum number of uniform line rating scalings reached."
+            throw(ErrorException("Maximum number of uniform line rating scalings reached."))
+            # @warn "Maximum number of uniform line rating scalings reached."
         end
     end
     return solved, M, point
