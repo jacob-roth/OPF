@@ -1,7 +1,7 @@
 module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra, NLsolve
-using MatrixNetworks ## for setting n-1 limits
+using MatrixNetworks, StructArrays ## for setting n-1 limits
 using MPCCases
 using Printf
 using Pkg
