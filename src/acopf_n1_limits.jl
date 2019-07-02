@@ -1,4 +1,4 @@
-function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_scale=1.25)
+function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_scale=1.25, max_iter=10)
     ## shortcuts
     lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
     busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
@@ -21,7 +21,7 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_sc
     ratings = deepcopy(ratings_0)
     for l in nonislanding_lines
         rl = remove_line!(opfdata, l)
-        adjust_feas_ratings!(opfdata, options, point, feas_tol)
+        adjust_feas_ratings!(opfdata, options, point, feas_tol, max_iter)
         solved, M, point = adjust_solv_ratings!(opfdata, options, point, solve_scale)
         reinstate_line!(opfdata, l, rl)
     end
