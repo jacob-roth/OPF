@@ -4,7 +4,8 @@ function acopf_model(opfdata, options::Dict=Dict())
   current_rating = haskey(options, :current_rating) ? options[:current_rating] : false
   remove_Bshunt = haskey(options, :remove_Bshunt) ? options[:remove_Bshunt] : false
   remove_tap = haskey(options, :remove_tap) ? options[:remove_tap] : false
-  pl = haskey(options, :print_level) ? options[:print_level] : 0
+  print_level = haskey(options, :print_level) ? options[:print_level] : 0
+  feasibility = haskey(options, :feasibility) ? options[:feasibility] : false
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -42,9 +43,13 @@ function acopf_model(opfdata, options::Dict=Dict())
     setupperbound(Va[opfdata.bus_ref], buses[opfdata.bus_ref].Va)
   end
 
-  @NLobjective(opfmodel, Min, sum( generators[i].coeff[generators[i].n-2]*(baseMVA*Pg[i])^2
-			             +generators[i].coeff[generators[i].n-1]*(baseMVA*Pg[i])
-				     +generators[i].coeff[generators[i].n  ] for i=1:ngen))
+  if feasibility == true
+    @NLobjective(opfmodel, Min, 0)
+  else
+    @NLobjective(opfmodel, Min, sum( generators[i].coeff[generators[i].n-2]*(baseMVA*Pg[i])^2
+  			             +generators[i].coeff[generators[i].n-1]*(baseMVA*Pg[i])
+  				     +generators[i].coeff[generators[i].n  ] for i=1:ngen))
+  end
 
   #
   # power flow balance
@@ -127,7 +132,7 @@ function acopf_model(opfdata, options::Dict=Dict())
     JuMP.registercon(opfmodel, :F_to, F_to)
   end
 
-  if pl >= 1
+  if print_level >= 1
     @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
     println("Lines with limits  ", nlinelim)
   end

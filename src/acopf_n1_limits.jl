@@ -22,7 +22,6 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_sc
     for l in nonislanding_lines
         println("========== REMOVING LINE $l        ==========")
         rl = remove_line!(opfdata, l)
-        adjust_feas_ratings!(opfdata, options, point, feas_tol)
         solved, M, point = adjust_solv_ratings!(opfdata, options, point, solve_scale, max_iter)
         reinstate_line!(opfdata, l, rl)
     end
@@ -30,7 +29,7 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_sc
     ## display
     for l in eachindex(lines)
         println("Line   From Bus    To Bus    Rating (Orig)    Rating (New)")
-        @printf("%3d      %3d        %3d         %5.3f            %5.3f\n", l, lines.from[l], lines.to[l], ratings_0[l], opfdata.lines.rateA[l])
+        @printf("%3d      %3d        %3d          %5.3f            %5.3f\n", l, lines.from[l], lines.to[l], ratings_0[l], opfdata.lines.rateA[l])
     end
     # return opfdata
 end
@@ -47,7 +46,7 @@ function get_nonislanding_lines(opfdata::OPFData, options::Dict)
     return nonislanding_lines
 end
 
-function adjust_feas_ratings!(opfdata::OPFData, options::Dict, point::Dict, tol=1e-6)
+function adjust_feas_ratings!(opfdata::OPFData, options::Dict, point::Dict, tol=1e-6, buffer=1.05)
     """
     modify `opfdata.lines.rateA` so that `point` is feasibile
     """
@@ -56,29 +55,47 @@ function adjust_feas_ratings!(opfdata::OPFData, options::Dict, point::Dict, tol=
         flowmag2s   = get_flowmag2s(point, opfdata, options)
         ratings     = get_ratings(flowmag2s, opfdata.baseMVA)
         adj_ratings = max.(ratings, opfdata.lines.rateA)
-        opfdata.lines.rateA .= adj_ratings
+        opfdata.lines.rateA .= adj_ratings .* buffer
     end
     feas, infeas_line_idx = check_feasibility(point, opfdata, options, tol)
     @assert(feas == true)
     nothing
 end
-function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scale=1.5, max_iter=10)
+function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scale=1.05, max_iter=10, pct=1.0)
     """
     modify `opfdata.lines.rateA` so that `acopf_solve` reaches an optimal point beginning from `point`
+    by adjusting ratings according to
+        1. ensuring flow feasibility
+        2. increasing ratings if bus Vm falls within `pct`% of its upper/lower limits
     """
     solved, M, _ = check_solvability(point, opfdata, options)
     iter = 1
     while solved == false && iter <= max_iter
         println("~~~~~~~~~~ inner solve iteration $iter ~~~~~~~~~~")
-        flowmag2s   = get_flowmag2s(point, opfdata, options)
-        ratings     = get_ratings(flowmag2s, opfdata.baseMVA)
-        adj_ratings = max.(ratings, opfdata.lines.rateA)
-        opfdata.lines.rateA .= scale .* adj_ratings
+        infeas_x = MathProgBase.getsolution(M.m.internalModel)
+        infeas_point = Dict()
+        infeas_point[:Pg] = infeas_x[[x.col for x in getindex(M.m, :Pg)]]
+        infeas_point[:Qg] = infeas_x[[x.col for x in getindex(M.m, :Qg)]]
+        infeas_point[:Vm] = infeas_x[[x.col for x in getindex(M.m, :Vm)]]
+        infeas_point[:Va] = infeas_x[[x.col for x in getindex(M.m, :Va)]]
+        adjust_feas_ratings!(opfdata, options, infeas_point, feas_tol)
+        bus_adj_hi = findall((opfdata.buses.Vmax .- infeas_point[:Vm])  ./ opfdata.buses.Vmax .> pct/100)
+        bus_adj_lo = findall((infeas_point[:Vm]  .- opfdata.buses.Vmin) ./ opfdata.buses.Vmin .> pct/100)
+        bus_adj    = collect(union(Set(bus_adj_hi), Set(bus_adj_lo)))
+        from_adj   = Set(collect(Iterators.flatten(opfdata.FromLines[bus_adj])))
+        to_adj     = Set(collect(Iterators.flatten(opfdata.ToLines[bus_adj])))
+        line_adj   = collect(union(from_adj, to_adj))
+        opfdata.lines.rateA[line_adj] .*= scale
+
+        ## solve and update
         solved, M, _ = check_solvability(point, opfdata, options)
         iter += 1
         if iter == max_iter
             throw(ErrorException("Maximum number of uniform line rating scalings reached."))
             # @warn "Maximum number of uniform line rating scalings reached."
+        end
+        if any(opfdata.lines.rateA .> 1e7)
+            throw(ErrorException("Maximum line limit increase reached."))
         end
     end
     return solved, M, point
@@ -157,16 +174,6 @@ function reinstate_line!(opfdata::OPFData, l::Int64, rl::MPCCases.Line)
     opfdata.ToLines   .= ToLines
     nothing
 end
-#
-# function get_new_ratings(point::Dict, opfdata::OPFData, options::Dict)
-#     feas, lineidx = check_feasibility(point, opfdata, options)
-#     if feas == false
-#         point, M  = get_opf_point(opfdata, options)
-#         flowmag2s = get_flowmag2s(M, opfdata, options)
-#         ratings   = get_ratings(flowmag2s, opfdata.baseMVA)
-#         return ratings, flowmag2s, point, M
-#     end
-# end
 
 function get_opf_point(opfdata::OPFData, options::Dict)
     M = acopf_model(opfdata, options)
@@ -202,7 +209,6 @@ function get_flowmag2s(point::Dict, opfdata::OPFData, options::Dict)
     Y = computeAdmittanceMatrix(opfdata, options)
     return get_flowmag2s(VM, VA, Y, opfdata, options)
 end
-
 
 function get_flowmag2s(M::OPFModel, opfdata::OPFData, options::Dict)
     VM = getvalue(M.m[:Vm])
