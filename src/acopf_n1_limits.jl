@@ -85,10 +85,11 @@ function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scal
         from_adj   = Set(collect(Iterators.flatten(opfdata.FromLines[bus_adj])))
         to_adj     = Set(collect(Iterators.flatten(opfdata.ToLines[bus_adj])))
         line_adj   = collect(union(from_adj, to_adj))
-        opfdata.lines.rateA[line_adj] .*= scale
+        opfdata.lines.rateA[line_adj] .*= 1.05#scale
 
         ## solve and update
         solved, M, _ = check_solvability(point, opfdata, options)
+        solved, M, _ = check_solvability(point, opfdata, options_sl)
         iter += 1
         if iter == max_iter
             throw(ErrorException("Maximum number of uniform line rating scalings reached."))

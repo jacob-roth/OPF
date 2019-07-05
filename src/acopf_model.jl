@@ -6,6 +6,7 @@ function acopf_model(opfdata, options::Dict=Dict())
   remove_tap = haskey(options, :remove_tap) ? options[:remove_tap] : false
   print_level = haskey(options, :print_level) ? options[:print_level] : 0
   feasibility = haskey(options, :feasibility) ? options[:feasibility] : false
+  slack_lines = haskey(options, :slack_lines) ? options[:slack_lines] : false
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -27,13 +28,17 @@ function acopf_model(opfdata, options::Dict=Dict())
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")
     opfmodel = Model(with_optimizer(Ipopt.Optimizer))
   else
-    opfmodel = Model(solver=IpoptSolver(print_level=pl))
+    opfmodel = Model(solver=IpoptSolver(print_level=print_level))
   end
 
   @variable(opfmodel, generators[i].Pmin <= Pg[i=1:ngen] <= generators[i].Pmax)
   @variable(opfmodel, generators[i].Qmin <= Qg[i=1:ngen] <= generators[i].Qmax)
   @variable(opfmodel, buses[i].Vmin <= Vm[i=1:nbus] <= buses[i].Vmax)
   @variable(opfmodel, -pi <= Va[1:nbus] <= pi)
+  if slack_lines == true
+    nlinelim = sum((lines.rateA .!= 0) .* (lines.rateA .< 1.0e10))
+    @variable(opfmodel, lineslack[1:nlinelim] >= 0.0)
+  end
 
   #fix the voltage angle at the reference bus
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")
@@ -44,11 +49,21 @@ function acopf_model(opfdata, options::Dict=Dict())
   end
 
   if feasibility == true
-    @NLobjective(opfmodel, Min, 0)
+    if slack_lines == true
+      @NLobjective(opfmodel, Min, sum(lineslack[i]^2 for i in 1:nlinelim))
+    else
+      @NLobjective(opfmodel, Min, 0)
+    end
   else
-    @NLobjective(opfmodel, Min, sum( generators[i].coeff[generators[i].n-2]*(baseMVA*Pg[i])^2
-  			             +generators[i].coeff[generators[i].n-1]*(baseMVA*Pg[i])
-  				     +generators[i].coeff[generators[i].n  ] for i=1:ngen))
+    if slack_lines == true
+      @NLobjective(opfmodel, Min, sum( generators[i].coeff[generators[i].n-2]*(baseMVA*Pg[i])^2
+    			             +generators[i].coeff[generators[i].n-1]*(baseMVA*Pg[i])
+    				     +generators[i].coeff[generators[i].n  ] for i=1:ngen) + sum(lineslack[i]^2 for i in 1:nlinelim))
+    else
+      @NLobjective(opfmodel, Min, sum( generators[i].coeff[generators[i].n-2]*(baseMVA*Pg[i])^2
+    			             +generators[i].coeff[generators[i].n-1]*(baseMVA*Pg[i])
+    				     +generators[i].coeff[generators[i].n  ] for i=1:ngen))
+    end
   end
 
   #
@@ -99,7 +114,11 @@ function acopf_model(opfdata, options::Dict=Dict())
         Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
         ## NOTE: current from Frank & Rebennack OPF primer: eq 5.11 where turns/tap ratios are accounted for in `Y`
         @NLexpression(opfmodel, current2, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)) * Yabs2)
-        F[l] = @NLconstraint(opfmodel, current2 <= flowmax)
+        if slack_lines == true
+          F[l] = @NLconstraint(opfmodel, current2 <= flowmax + lineslack[nlinelim])
+        else
+          F[l] = @NLconstraint(opfmodel, current2 <= flowmax)
+        end
       else
         #branch apparent power limits (from bus)
         Yff_abs2=YffR[l]^2+YffI[l]^2; Yft_abs2=YftR[l]^2+YftI[l]^2
