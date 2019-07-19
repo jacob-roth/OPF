@@ -27,7 +27,7 @@ function acopf_model(opfdata, options::Dict=Dict())
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")
     opfmodel = Model(with_optimizer(Ipopt.Optimizer))
   else
-    opfmodel = Model(solver=IpoptSolver(print_level=pl))
+    opfmodel = Model(solver=IpoptSolver(print_level=print_level))
   end
 
   @variable(opfmodel, generators[i].Pmin <= Pg[i=1:ngen] <= generators[i].Pmax)
