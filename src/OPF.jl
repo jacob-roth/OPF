@@ -1,4 +1,4 @@
-# module OPF
+module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra, NLsolve
 using MatrixNetworks, StructArrays ## for setting n-1 limits
@@ -57,4 +57,4 @@ export get_opf_point
 export get_flowmag2s
 export get_ratings
 
-# end # module
+end # module

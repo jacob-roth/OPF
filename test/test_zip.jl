@@ -8,11 +8,11 @@ m_eval = setup(m.m);               ## deterministic model evaluator
 m_zbar = deepcopy(m_eval.last_x);  ## deterministic model equilibrium z̄
 OPF.acopf_outputAll(m, opfdata)
 
-z      = acopf_zip_model(opfdata)
-z      = acopf_solve(z, opfdata)
+z      = OPF.acopf_zip_model(opfdata)
+z      = OPF.acopf_solve(z, opfdata)
 z_eval = setup(z.m);               ## deterministic model evaluator
 z_zbar = deepcopy(z_eval.last_x);  ## deterministic model equilibrium z̄
-acopf_outputAll(z, opfdata)
+OPF.acopf_outputAll(z, opfdata)
 
 @testset "zip base equality" begin
     @test(norm(m_zbar - z_zbar) < tol)
@@ -34,11 +34,11 @@ for i in eachindex(α)
     D[:zip][:alpha] = α[i]
     D[:zip][:beta]  = β[i]
     D[:zip][:gamma] = γ[i]
-    z      = acopf_zip_model(opfdata, D)
-    z      = acopf_solve(z, opfdata)
+    z      = OPF.acopf_zip_model(opfdata, D)
+    z      = OPF.acopf_solve(z, opfdata)
     z_eval = setup(z.m);               ## deterministic model evaluator
     z_zbar = deepcopy(z_eval.last_x);  ## deterministic model equilibrium z̄
-    acopf_outputAll(z, opfdata, D)
+    OPF.acopf_outputAll(z, opfdata, D)
     obj[i] = getobjectivevalue(z.m)
     opt[i] = z.status
 end
