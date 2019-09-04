@@ -14,11 +14,17 @@ mutable struct OPFModel
 end
 export OPFModel
 
+include("default.jl")
+export DefaultOptions
+
 include("acopf_model.jl")
 export acopf_model
 
 include("s_acopf_model.jl")
 export s_acopf_model
+
+include("acopf_zip_model.jl")
+export acopf_zip_model
 
 include("util.jl")
 export acopf_solve, acopf_initialPt_IPOPT

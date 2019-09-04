@@ -158,9 +158,9 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
 
   return
 end
-function acopf_outputAll(M::OPFModel, opfdata::OPFData, options::Dict)
-  cr   = haskey(options, :current_rating) ? options[:current_rating] : false
-  loss = haskey(options, :lossless)       ? options[:lossless]       : false
+function acopf_outputAll(M::OPFModel, opfdata::OPFData, options::Dict=DefaultOptions())
+  cr   = options[:current_rating]
+  loss = options[:lossless]
   return acopf_outputAll(M.m, M.kind, opfdata, loss, cr)
 end
 

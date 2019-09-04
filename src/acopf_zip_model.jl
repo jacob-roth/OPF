@@ -1,4 +1,4 @@
-function acopf_model(opfdata, options::Dict=DefaultOptions())
+function acopf_zip_model(opfdata, options::Dict=DefaultOptions())
   # parse options
   lossless       = options[:lossless]
   current_rating = options[:current_rating]
@@ -6,6 +6,8 @@ function acopf_model(opfdata, options::Dict=DefaultOptions())
   remove_tap     = options[:remove_tap]
   print_level    = options[:print_level]
   feasibility    = options[:feasibility]
+  zip            = options[:zip]
+  sol            = options[:sol]
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -55,13 +57,30 @@ function acopf_model(opfdata, options::Dict=DefaultOptions())
   # power flow balance
   #
   for b in 1:nbus
+    # ZIP + solar adjustment of Pd and Qd
+    if sol[:I_P] != false
+      P_s_t_hat = sol[:mu_P] * sol[:I_P][b]
+    else
+      P_s_t_hat = 0.0
+    end
+    if sol[:I_Q] != false
+      Q_s_t_hat = sol[:mu_Q] * sol[:I_Q][b]
+    else
+      Q_s_t_hat = 0.0
+    end
+    P_d_t_hat = @NLexpression(opfmodel, buses[b].Pd * (
+                              zip[:alpha] + zip[:beta] * (Vm[b]/zip[:V0]) + zip[:gamma] * (Vm[b]/zip[:V0])^2
+                                                      ) + P_s_t_hat)
+    Q_d_t_hat = @NLexpression(opfmodel, buses[b].Qd * (
+                              zip[:alpha] + zip[:beta] * (Vm[b]/zip[:V0]) + zip[:gamma] * (Vm[b]/zip[:V0])^2
+                                                      ) + Q_s_t_hat)
     #real part
     @NLconstraint(
       opfmodel,
       ( sum( YffR[l] for l in FromLines[b]) + sum( YttR[l] for l in ToLines[b]) + YshR[b] ) * Vm[b]^2
       + sum( Vm[b]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[b]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[b]-Va[busIdx[lines[l].to]]  )) for l in FromLines[b] )
       + sum( Vm[b]*Vm[busIdx[lines[l].from]]*( YtfR[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfI[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]   )
-      - ( sum(baseMVA*Pg[g] for g in BusGeners[b]) - buses[b].Pd ) / baseMVA      # Sbus part
+      - ( sum(baseMVA*Pg[g] for g in BusGeners[b]) - P_d_t_hat ) / baseMVA      # Sbus part
       ==0)
     #imaginary part
     @NLconstraint(
@@ -69,7 +88,7 @@ function acopf_model(opfdata, options::Dict=DefaultOptions())
       ( sum(-YffI[l] for l in FromLines[b]) + sum(-YttI[l] for l in ToLines[b]) - YshI[b] ) * Vm[b]^2
       + sum( Vm[b]*Vm[busIdx[lines[l].to]]  *(-YftI[l]*cos(Va[b]-Va[busIdx[lines[l].to]]  ) + YftR[l]*sin(Va[b]-Va[busIdx[lines[l].to]]  )) for l in FromLines[b] )
       + sum( Vm[b]*Vm[busIdx[lines[l].from]]*(-YtfI[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfR[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]   )
-      - ( sum(baseMVA*Qg[g] for g in BusGeners[b]) - buses[b].Qd ) / baseMVA      #Sbus part
+      - ( sum(baseMVA*Qg[g] for g in BusGeners[b]) - Q_d_t_hat ) / baseMVA      #Sbus part
       ==0)
   end
   #
