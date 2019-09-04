@@ -1,4 +1,4 @@
-module OPF
+# module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra, NLsolve
 using MatrixNetworks, StructArrays ## for setting n-1 limits
@@ -14,11 +14,17 @@ mutable struct OPFModel
 end
 export OPFModel
 
+include("default.jl")
+export DefaultOptions
+
 include("acopf_model.jl")
 export acopf_model
 
 include("s_acopf_model.jl")
 export s_acopf_model
+
+include("acopf_zip_model.jl")
+export acopf_zip_model
 
 include("util.jl")
 export acopf_solve, acopf_initialPt_IPOPT
@@ -51,4 +57,4 @@ export get_opf_point
 export get_flowmag2s
 export get_ratings
 
-end # module
+# end # module
