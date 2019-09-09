@@ -9,7 +9,7 @@
 ### returns
     - `J::Array{Float64,2}`: full Jacobian (`dF_dz`)
     `J = [ dP_dPg   dP_dQg   dP_dVm   dP_dVa   dP_dPd   dP_dQd;
-          dQ_dPg   dQ_dQg   dQ_dVm   dQ_dVa   dQ_dPd   dQ_dQd
+           dQ_dPg   dQ_dQg   dQ_dVm   dQ_dVa   dQ_dPd   dQ_dQd
           ...      ...      ...      ...      ...      ...    ]`
 """
 function jac_z_num(z::Array{Float64,1}; model::JuMP.NLPEvaluator)
@@ -34,7 +34,7 @@ end
 ### returns
     - `J::Array{Float64,2}`: full Jacobian (`dF_dz`)
     `J = [ dP_dPg   dP_dQg   dP_dVm   dP_dVa   dP_dPd   dP_dQd;
-          dQ_dPg   dQ_dQg   dQ_dVm   dQ_dVa   dQ_dPd   dQ_dQd ]`
+           dQ_dPg   dQ_dQg   dQ_dVm   dQ_dVa   dQ_dPd   dQ_dQd ]`
     - `JJ::Dict`: dictionary of subcomponents of `dF_dz`
     - `dF::Dict`: dictionary of `dF_dx`, `dF_dy`, `dF_dd`
 """

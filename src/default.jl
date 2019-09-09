@@ -21,3 +21,14 @@ function DefaultOptions()
   D[:sol]            = sol0
   return D
 end
+
+function DefaultAdjustments()
+    D = Dict()
+    D[:Pg_hi] = Dict(:v => 0.0, :i => Int64[])  ## dec scale bound-constraints at bus `i` as (1 - v)
+    D[:Pg_lo] = Dict(:v => 0.0, :i => Int64[])  ## inc scale bound-constraints at bus `i` as (1 + v)
+    D[:Qg_hi] = Dict(:v => 0.0, :i => Int64[])  ## dec scale bound-constraints at bus `i` as (1 - v)
+    D[:Qg_lo] = Dict(:v => 0.0, :i => Int64[])  ## inc scale bound-constraints at bus `i` as (1 + v)
+    D[:Vm_hi] = Dict(:v => 0.0, :i => Int64[])  ## dec scale bound-constraints at bus `i` as (1 - v)
+    D[:Vm_lo] = Dict(:v => 0.0, :i => Int64[])  ## inc scale bound-constraints at bus `i` as (1 + v)
+    return D
+end

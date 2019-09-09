@@ -1,4 +1,4 @@
-function acopf_model(opfdata, options::Dict=DefaultOptions())
+function acopf_model(opfdata, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
   # parse options
   lossless       = options[:lossless]
   current_rating = options[:current_rating]
@@ -6,6 +6,12 @@ function acopf_model(opfdata, options::Dict=DefaultOptions())
   remove_tap     = options[:remove_tap]
   print_level    = options[:print_level]
   feasibility    = options[:feasibility]
+  Pg_hi          = adjustments[:Pg_hi]
+  Pg_lo          = adjustments[:Pg_lo]
+  Qg_hi          = adjustments[:Qg_hi]
+  Qg_lo          = adjustments[:Qg_lo]
+  Vm_hi          = adjustments[:Vm_hi]
+  Vm_lo          = adjustments[:Vm_lo]
   if lossless && !current_rating
     println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
     current_rating = true
@@ -30,10 +36,31 @@ function acopf_model(opfdata, options::Dict=DefaultOptions())
     opfmodel = Model(solver=IpoptSolver(print_level=print_level))
   end
 
-  @variable(opfmodel, generators[i].Pmin <= Pg[i=1:ngen] <= generators[i].Pmax)
-  @variable(opfmodel, generators[i].Qmin <= Qg[i=1:ngen] <= generators[i].Qmax)
-  @variable(opfmodel, buses[i].Vmin <= Vm[i=1:nbus] <= buses[i].Vmax)
-  @variable(opfmodel, -pi <= Va[1:nbus] <= pi)
+  ## bound constraints
+  Pg_hi_val = zeros(ngen); Pg_lo_val = zeros(ngen); Qg_hi_val = zeros(ngen); Qg_lo_val = zeros(ngen);
+  for i in 1:ngen
+    Pg_hi_val[i] = generators[i].Pmax - (Pg_hi[:v] * (i ∈ Pg_hi[:i]))
+    Pg_lo_val[i] = generators[i].Pmin + (Pg_lo[:v] * (i ∈ Pg_lo[:i]))
+    Qg_hi_val[i] = generators[i].Qmax - (Qg_hi[:v] * (i ∈ Qg_hi[:i]))
+    Qg_lo_val[i] = generators[i].Qmin + (Qg_lo[:v] * (i ∈ Qg_lo[:i]))
+  end
+  Vm_hi_val = zeros(nbus); Vm_lo_val = zeros(nbus)
+  for i in 1:nbus
+    Vm_hi_val[i] = buses[i].Vmax - (Vm_hi[:v] * (i ∈ Vm_hi[:i]))
+    Vm_lo_val[i] = buses[i].Vmin + (Vm_lo[:v] * (i ∈ Vm_lo[:i]))
+  end
+  # println("Pg upper bounds: $Pg_hi_val")
+  # println("Pg lower bounds: $Pg_lo_val")
+  println("Qg adjusted upper bounds: "); display(Qg_hi_val[Qg_hi[:i]])
+  println("Qg adjusted lower bounds: "); display(Qg_lo_val[Qg_lo[:i]])
+  # println("Vm upper bounds: $Vm_hi_val")
+  # println("Vm lower bounds: $Vm_lo_val")
+
+  ## variables
+  @variable(opfmodel, Pg_lo_val[i] <= Pg[i=1:ngen] <= Pg_hi_val[i])
+  @variable(opfmodel, Qg_lo_val[i] <= Qg[i=1:ngen] <= Qg_hi_val[i])
+  @variable(opfmodel, Vm_lo_val[i] <= Vm[i=1:nbus] <= Vm_hi_val[i])
+  @variable(opfmodel,          -pi <= Va[i=1:nbus] <= pi)
 
   #fix the voltage angle at the reference bus
   if "19" ∈ split(string(Pkg.installed()["JuMP"]), ".")

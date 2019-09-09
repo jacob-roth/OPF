@@ -28,6 +28,21 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
 end
 function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind); end
 
+function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
+
+  #
+  # initial point - assumed to be accounted for in `opfmodel`
+  #
+  status = :IpoptInit
+  status = solve(opfmodel)
+
+  if status != :Optimal
+    println("Could not solve the model to optimality.")
+  end
+  return opfmodel, status
+end
+function acpf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acpf_solve(M.m, opfdata)..., M.kind); end
+
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
   Pg=zeros(length(opfdata.generators)); Qg=zeros(length(opfdata.generators)); i=1
@@ -53,6 +68,15 @@ function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
   Va = opfdata.buses[opfdata.bus_ref].Va * ones(length(opfdata.buses))
 
   return Pg,Qg,Vm,Va
+end
+function acopf_initialPt_IPOPT_point(opfdata::MPCCases.OPFData)
+  Pg, Qg, Vm, Va = acopf_initialPt_IPOPT(opfdata)
+  point = Dict()
+  point[:Pg] = Pg
+  point[:Qg] = Qg
+  point[:Vm] = Vm
+  point[:Va] = Va
+  return point
 end
 
 ## -----------------------------------------------------------------------------
