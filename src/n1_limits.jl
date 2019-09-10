@@ -95,5 +95,5 @@ function get_n1_limits(case::String, path::String,
             break
         end
     end
-    return opfdata
+    return opfdata, dp, scm
 end
