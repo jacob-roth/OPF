@@ -43,6 +43,55 @@ function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
 end
 function acpf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acpf_solve(M.m, opfdata)..., M.kind); end
 
+function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, contingencies::Dict, warm_point=false)
+  nbus = length(opfdata.buses); nline = length(opfdata.lines); ngen = length(opfdata.generators)
+  R     = opfdata.bus_ref
+  G     = filter(x -> x ∉ R, findall(.!isempty.(opfdata.BusGenerators)))
+  L     = findall(isempty.(opfdata.BusGenerators))
+  not_R = deleteat!(collect(1:nbus), R)
+
+  #
+  # initial point - needed especially for pegase cases
+  #
+  if warm_point == false
+    Pg0,Qg0,Vm0,Va0 = acopf_initialPt_IPOPT(opfdata)
+  else
+    Pg0 = warm_point[:Pg]
+    Qg0 = warm_point[:Qg]
+    Vm0 = warm_point[:Vm]
+    Va0 = warm_point[:Va]
+  end
+  ## initial dispatch point
+  setvalue(getindex(opfmodel, :Pg), Pg0)
+  setvalue(getindex(opfmodel, :Qg), Qg0)
+  setvalue(getindex(opfmodel, :Vm), Vm0)
+  setvalue(getindex(opfmodel, :Va), Va0)
+
+  dp_0, m_0 = get_dispatch_point(opfdata, options)
+  for c_id in keys(contingencies)
+    for gi in zip([G; R], [first.(opfdata.BusGenerators[G]); first.(opfdata.BusGenerators[R])])
+      g = gi[1]
+      i = gi[2]
+      setvalue(getindex(opfmodel, Symbol("Qg_$(c_id)"))[g], dp_0[:Qg][i])
+    end
+    for i in L
+      setvalue(getindex(opfmodel, Symbol("Vm_$(c_id)"))[i], dp_0[:Vm][i])
+    end
+    for i in not_R
+      setvalue(getindex(opfmodel, Symbol("Va_$(c_id)"))[i], dp_0[:Va][i])
+    end
+  end
+
+  status = :IpoptInit
+  status = solve(opfmodel)
+
+  if status != :Optimal
+    println("Could not solve the model to optimality.")
+  end
+  return opfmodel, status
+end
+function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false); return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind); end
+
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
   Pg=zeros(length(opfdata.generators)); Qg=zeros(length(opfdata.generators)); i=1
@@ -342,4 +391,331 @@ function nonunique(x::AbstractArray{T}) where T
         end
     end
     duplicatedvector
+end
+
+function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
+  # parse options
+  lossless       = options[:lossless]
+  current_rating = options[:current_rating]
+  remove_Bshunt  = options[:remove_Bshunt]
+  remove_tap     = options[:remove_tap]
+  print_level    = options[:print_level]
+  feasibility    = options[:feasibility]
+  Pg_hi          = adjustments[:Pg_hi]
+  Pg_lo          = adjustments[:Pg_lo]
+  Qg_hi          = adjustments[:Qg_hi]
+  Qg_lo          = adjustments[:Qg_lo]
+  Vm_hi          = adjustments[:Vm_hi]
+  Vm_lo          = adjustments[:Vm_lo]
+  if lossless && !current_rating
+    println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
+    current_rating = true
+  end
+
+  # shortcuts for compactness
+  lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
+  busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
+  nbus = length(buses); nline = length(lines); ngen = length(generators)
+
+  # branch admitances
+  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA;
+                                                      lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
+  Y = computeAdmittanceMatrix(opfdata, options)
+
+  opfmodeldata              = Dict()
+  opfmodeldata[:lines]      = lines;
+  opfmodeldata[:buses]      = buses;
+  opfmodeldata[:generators] = generators;
+  opfmodeldata[:baseMVA]    = baseMVA;
+  opfmodeldata[:BusIdx]     = busIdx;
+  opfmodeldata[:FromLines]  = FromLines;
+  opfmodeldata[:ToLines]    = ToLines;
+  opfmodeldata[:BusGenerators]  = BusGeners;
+  opfmodeldata[:YffR]       = YffR;
+  opfmodeldata[:YffI]       = YffI;
+  opfmodeldata[:YttR]       = YttR;
+  opfmodeldata[:YttI]       = YttI;
+  opfmodeldata[:YftR]       = YftR;
+  opfmodeldata[:YftI]       = YftI;
+  opfmodeldata[:YtfR]       = YtfR;
+  opfmodeldata[:YtfI]       = YtfI;
+  opfmodeldata[:YshR]       = YshR;
+  opfmodeldata[:YshI]       = YshI;
+  opfmodeldata[:Y]          = Y;
+  return opfmodeldata
+end
+
+function update_loadings!(opfdata::OPFData, options::Dict,
+                          loading::Float64=DefaultLoading(), adj_pf::Float64=DefaultAdjPF())
+    Pd_new, Qd_new = get_loadings(opfdata, options, loading, adj_pf)
+    opfdata.buses.Pd .= Pd_new
+    opfdata.buses.Qd .= Qd_new
+    nothing
+end
+
+function update_ratings_max!(opfdata::OPFData, options::Dict)
+  Y     = computeAdmittanceMatrix(opfdata, options)
+  f     = opfdata.lines.from
+  t     = opfdata.lines.to
+  Y_tf  = [Y[tt,ff] for (tt,ff) in zip(t,f)]
+  Y_ft  = [Y[ff,tt] for (tt,ff) in zip(t,f)]
+  V_t   = opfdata.buses.Vmax[t]
+  V_f   = opfdata.buses.Vmax[f]
+  Yabs2 = max.(abs2.(Y_tf), abs2.(Y_ft))
+
+  if options[:current_rating] == true
+    max_ratings = (2.0 .* V_t .^2 .* V_f .^2) .* 1.0 .* Yabs2
+  else
+    throw("Max power ratings not yet implemented.")
+  end
+  opfdata.lines.rateA .= max_ratings
+end
+
+function get_loadings(opfdata::OPFData, options::Dict,
+                      loading::Float64=DefaultLoading(), adj_pf::Float64=DefaultAdjPF())
+    ## get total suppliable Pg & Qg
+    total_Pg = sum(opfdata.generators.Pmax) * opfdata.baseMVA
+    total_Qg = sum(opfdata.generators.Qmax) * opfdata.baseMVA
+    total_Sg = total_Pg + im*total_Qg
+    PFg      = total_Pg / abs(total_Sg)  # demand power factor
+    total_Pd = sum(opfdata.buses.Pd)
+    total_Qd = sum(opfdata.buses.Qd)
+    total_Sd = total_Pd + im*total_Qd
+    PFd      = total_Pd / abs(total_Sd)  # demand power factor
+    cosθ     = (adj_pf == 0.0) ? max(PFd, PFg) : adj_pf
+    total_Pd_new = loading * total_Pg
+    total_Qd_new = total_Pd_new * tan(acos(cosθ))
+
+    ## modify Pd & Qd to fixed percentage of total suppliable Pg & Qg
+    Pd_new = (opfdata.buses.Pd ./ total_Pd) .* total_Pd_new
+    Qd_new = (opfdata.buses.Qd ./ total_Qd) .* total_Qd_new
+    return Pd_new, Qd_new
+end
+
+function get_dispatch_point(opfdata::OPFData, options::Dict, adjustments::Dict=DefaultAdjustments())
+    """
+    solve an OPF problem (cold) to get a dispatch point
+    """
+    M = acopf_model(opfdata, options, adjustments)
+    M = acopf_solve(M, opfdata)
+    x_dispatch = MathProgBase.getsolution(M.m.internalModel)
+    dispatch_point = Dict()
+    dispatch_point[:Pg] = deepcopy(x_dispatch[[x.col for x in getindex(M.m, :Pg)]])
+    dispatch_point[:Qg] = deepcopy(x_dispatch[[x.col for x in getindex(M.m, :Qg)]])
+    dispatch_point[:Vm] = deepcopy(x_dispatch[[x.col for x in getindex(M.m, :Vm)]])
+    dispatch_point[:Va] = deepcopy(x_dispatch[[x.col for x in getindex(M.m, :Va)]])
+
+    return dispatch_point, M
+end
+
+function get_operating_point(dispatch_point::Dict, opfdata::OPFData, options::Dict, tol=DefaultFeasTol())
+    """
+    solve a PF problem from a dispatch point to get an operating point
+    """
+    ## TODO: RETURN INTERMEDIATE VALUE IF INFEASIBLE
+    M = acpf_model(dispatch_point, opfdata, options, tol)
+    M = acpf_solve(M, opfdata)
+    operating_point = Dict()
+    operating_point[:Pg] = deepcopy(dispatch_point[:Pg])
+    operating_point[:Qg] = deepcopy(getvalue(M.m[:Qg]))
+    operating_point[:Vm] = deepcopy(getvalue(M.m[:Vm]))
+    operating_point[:Va] = deepcopy(getvalue(M.m[:Va]))
+    return operating_point, M
+end
+
+## -----------------------------------------------------------------------------
+## helpers: computation
+## -----------------------------------------------------------------------------
+function get_flowmag2s(VM::Array{Float64,1}, VA::Array{Float64,1}, Y::AbstractArray, opfdata::OPFData, options::Dict, c::Bool=false)
+    lines = opfdata.lines; busIdx = opfdata.BusIdx; nline = length(lines)
+    if c == true
+      nline_orig = nline+1
+    else
+      nline_orig = nline
+    end
+    current2s = zeros(nline_orig)  ## NOTE: HARDCODED 1 since only one asset removed
+    for l in 1:nline_orig
+        line = lines[(lines.id .== l)]
+        if !isempty(line)
+          line = first(line)
+          f = line.from; t = line.to
+          Y_tf = Y[t, f]; Y_ft = Y[f, t]
+          ## NOTE: current from Frank & Rebennack OPF primer: eq 5.11 where turns/tap ratios are accounted for in `Y`
+          Vm_f = VM[busIdx[f]]; Va_f = VA[busIdx[f]]
+          Vm_t = VM[busIdx[t]]; Va_t = VA[busIdx[t]]
+          Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
+          current2 = Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)
+          current2 *= Yabs2
+          current2s[l] = current2
+        end
+    end
+    return (flowmag2=current2s, id=collect(1:nline_orig))
+end
+
+function get_flowmag2s(point::Dict, opfdata::OPFData, options::Dict, c::Bool=false)
+    VM = point[:Vm]
+    VA = point[:Va]
+    Y = computeAdmittanceMatrix(opfdata, options)
+    return get_flowmag2s(VM, VA, Y, opfdata, options, c)
+end
+
+function get_flowmag2s(M::OPFModel, opfdata::OPFData, options::Dict, c::Bool=false)
+    VM = getvalue(M.m[:Vm])
+    VA = getvalue(M.m[:Va])
+    Y = computeAdmittanceMatrix(opfdata, options)
+    return get_flowmag2s(VM, VA, Y, opfdata, options, c)
+end
+
+function get_ratings(flowmag2s::Array{Float64,1}, baseMVA::Float64=100.0)
+    return sqrt.(flowmag2s) * baseMVA
+end
+
+## -----------------------------------------------------------------------------
+## helpers: topology
+## -----------------------------------------------------------------------------
+function get_nonislanding_lines(opfdata::OPFData, options::Dict)
+    nonislanding_lines = Int64[]
+    for l in eachindex(opfdata.lines)
+        opfd = deepcopy(opfdata)
+        remove_line!(opfd, l)
+        Y = sparse(computeAdmittanceMatrix(opfd, options))
+        m = strong_components_map(Y)
+        if length(unique(m)) == 1; push!(nonislanding_lines, l); end
+    end
+    return nonislanding_lines
+end
+
+function remove_line!(opfdata::OPFData, l::Int64, verb::Bool=false)
+    lines = [x for x in opfdata.lines]
+    removed = l ∉ [x.id for x in lines]
+    if !removed
+        if verb; println("removing line $l"); end
+        rl = splice!(lines, l)
+        opfdata.lines = StructArray(lines)
+
+        ## adjust FromLines & ToLines
+        FromLines, ToLines = mapLinesToBuses(opfdata.buses, opfdata.lines, opfdata.BusIdx)
+        opfdata.FromLines .= FromLines
+        opfdata.ToLines   .= ToLines
+        return rl
+    else
+        throw("Line $l has already been removed")
+    end
+end
+
+function reinstate_line!(opfdata::OPFData, l::Int64, rl::MPCCases.Line, verb::Bool=false)
+    lines = [x for x in opfdata.lines]
+    redundant = any([(rl == x) for x in lines])
+    if !redundant
+        if verb; println("reinstating line $l"); end
+        splice!(lines, (l):(l-1), [rl])
+        opfdata.lines = StructArray(lines)
+
+        ## adjust FromLines & ToLines
+        FromLines, ToLines = mapLinesToBuses(opfdata.buses, opfdata.lines, opfdata.BusIdx)
+        opfdata.FromLines .= FromLines
+        opfdata.ToLines   .= ToLines
+    else
+        throw("Line $l has already been reinstated")
+    end
+    nothing
+end
+
+
+function set_initial_limits!(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
+    ## set ratings at maximum ratings
+    update_ratings_max!(opfdata, options)
+    max_ratings = deepcopy(opfdata.lines.rateA)
+
+    ## get x̄₀ (base dispatch point)
+    dp_0, M_0 = get_dispatch_point(opfdata, options, adjustments)
+
+    ## update ratings to base dispatch point
+    flowmag2s_0 = get_flowmag2s(dp_0, opfdata, options)
+    ratings_0   = get_ratings(flowmag2s_0, opfdata.baseMVA)
+    opfdata.lines.rateA .= ratings_0
+    nothing
+end
+
+function get_contingencies(opfdata::OPFData, options::Dict=DefaultOptions())
+    contingencies = Dict()
+    nonislanding_lines = get_nonislanding_lines(opfdata, options)
+    for l in nonislanding_lines
+        contingencies[l] = (c_type=:line, asset=deepcopy(opfdata.lines[l]))
+    end
+    return contingencies
+end
+
+function update_ratings_flowviol!(point::Dict, opfdata::OPFData, options::Dict,
+                                  feas_tol=DefaultFeasTol(), buffer=DefaultBuffer())
+    """
+    modify `opfdata.lines.rateA` so that `point` is feasibile
+    """
+    feas, infeas_dict = check_feasibility(point, opfdata, options, feas_tol)
+    if !isempty(infeas_dict[:flows])
+        ## flow infeasibility
+        lines = infeas_dict[:flows]
+        flowmag2s   = get_flowmag2s(point, opfdata, options)
+        ratings     = get_ratings(flowmag2s, opfdata.baseMVA)
+        adj_ratings = max.(ratings, opfdata.lines.rateA)
+        opfdata.lines.rateA[lines] .= adj_ratings[lines] .* (1.0 + buffer)
+    end
+end
+
+
+function check_feasibility(check_point::Dict, opfdata::OPFData, options::Dict, feas_tol=DefaultFeasTol())
+    """
+    cehck feasibility of `point` and return dictionary of violating buses and lines
+    """
+    ## process
+    PG = check_point[:Pg]
+    QG = check_point[:Qg]
+    VM = check_point[:Vm]
+    VA = check_point[:Va]
+    Y  = computeAdmittanceMatrix(opfdata, options)
+    Pg_hi = opfdata.generators.Pmax
+    Pg_lo = opfdata.generators.Pmin
+    Qg_hi = opfdata.generators.Qmax
+    Qg_lo = opfdata.generators.Qmin
+    Vm_hi = opfdata.buses.Vmax
+    Vm_lo = opfdata.buses.Vmin
+    Va_hi = pi
+    Va_lo = -pi
+    flowmag2s = get_flowmag2s(VM, VA, Y, opfdata, options)
+    flowmax   = (opfdata.lines.rateA ./ opfdata.baseMVA).^2
+
+    ## check componentwise feasibility
+    feas  = true
+    PG_hi = PG .<= Pg_hi .+ feas_tol
+    PG_lo = PG .>= Pg_lo .- feas_tol
+    QG_hi = QG .<= Qg_hi .+ feas_tol
+    QG_lo = QG .>= Qg_lo .- feas_tol
+    VM_hi = VM .<= Vm_hi .+ feas_tol
+    VM_lo = VM .>= Vm_lo .- feas_tol
+    VA_hi = VA .<= Va_hi .+ feas_tol
+    VA_lo = VA .>= Va_lo .- feas_tol
+    flows = flowmag2s .<= flowmax .+ feas_tol
+    feas *= prod(PG_hi); feas *= prod(PG_lo)
+    feas *= prod(QG_hi); feas *= prod(QG_lo)
+    feas *= prod(VM_hi); feas *= prod(VM_lo)
+    feas *= prod(VA_hi); feas *= prod(VA_lo)
+    feas *= prod(flows)
+
+    ## infeasibility results
+    infeas_dict = Dict()
+    infeas_dict[:PG_hi] = findall(.!PG_hi)
+    infeas_dict[:PG_lo] = findall(.!PG_lo)
+    infeas_dict[:QG_hi] = findall(.!QG_hi)
+    infeas_dict[:QG_lo] = findall(.!QG_lo)
+    infeas_dict[:VM_hi] = findall(.!VM_hi)
+    infeas_dict[:VM_lo] = findall(.!VM_lo)
+    infeas_dict[:VA_hi] = findall(.!VA_hi)
+    infeas_dict[:VA_lo] = findall(.!VA_lo)
+    infeas_dict[:flows] = findall(.!flows)
+
+    if feas == true
+        return true, Dict()
+    else
+        return false, infeas_dict
+    end
 end

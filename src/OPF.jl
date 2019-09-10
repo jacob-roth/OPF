@@ -1,7 +1,7 @@
 # module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra, NLsolve
-using MatrixNetworks, StructArrays ## for setting n-1 limits
+using MatrixNetworks, StructArrays, Distributed ## for setting n-1 limits
 using MPCCases
 using Printf
 using Pkg
@@ -17,6 +17,10 @@ export OPFModel
 include("default.jl")
 export DefaultOptions
 
+include("constraints.jl")
+export add_p_constraint!, add_q_constraint!
+export add_line_current_constraint!, add_line_power_constraint!
+
 include("acpf_model.jl")
 export acpf_model
 
@@ -29,11 +33,15 @@ export s_acopf_model
 include("acopf_zip_model.jl")
 export acopf_zip_model
 
+include("scacopf_model.jl")
+export scacopf_model, get_operating_points
+
 include("util.jl")
 export acopf_solve, acopf_initialPt_IPOPT
 export acopf_outputAll, get_values
 export RGL_id, RGL_idx, model_idx
 export PQnet
+export get_opfmodeldata
 
 include("pfe.jl")
 export P_i, Q_i

@@ -19,6 +19,7 @@ function DefaultOptions()
               :I_Q   => false) ## Q irradience -> reactive power forecast
   D[:zip]            = zip0
   D[:sol]            = sol0
+  D[:tol]            = 1e-9
   return D
 end
 
@@ -32,3 +33,12 @@ function DefaultAdjustments()
     D[:Vm_lo] = Dict(:v => 0.0, :i => Int64[])  ## inc scale bound-constraints at bus `i` as (1 + v)
     return D
 end
+
+function DefaultLoading();    return 0.50; end  # 0.85
+function DefaultAdjPF();      return 0.0;  end
+function DefaultFeasTol();    return 1e-6; end
+function DefaultBuffer();     return 0.25; end
+function DefaultMaxIter();    return 10;   end
+function DefaultMaxLimit();   return 1e7;  end
+function DefaultVPct();       return 1.0;  end
+function DefaultTightenAmt(); return 1e-3; end
