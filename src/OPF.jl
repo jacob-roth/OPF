@@ -36,6 +36,9 @@ export acopf_zip_model
 include("scacopf_model.jl")
 export scacopf_model, get_operating_points
 
+include("n1_limits.jl")
+export get_n1_limits
+
 include("util.jl")
 export acopf_solve, acopf_initialPt_IPOPT
 export acopf_outputAll, get_values

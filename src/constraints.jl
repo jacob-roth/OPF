@@ -22,8 +22,8 @@ function add_p_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
   YshR       = opfmodeldata[:YshR];
   YshI       = opfmodeldata[:YshI];
   Y          = opfmodeldata[:Y];
-  nbus = length(buses); nline = length(lines); ngen = length(generators)
-  R     = opfdata.bus_ref
+  nbus  = length(buses); nline = length(lines); ngen = length(generators)
+  R     = findall(buses.bustype .== 3)[1]
   G     = filter(x -> x ∉ R, findall(.!isempty.(opfmodeldata[:BusGenerators])))
   L     = findall(isempty.(opfmodeldata[:BusGenerators]))
   not_R = deleteat!(collect(1:nbus), R)
@@ -113,8 +113,8 @@ function add_q_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
   YshR       = opfmodeldata[:YshR];
   YshI       = opfmodeldata[:YshI];
   Y          = opfmodeldata[:Y];
-  nbus = length(buses); nline = length(lines); ngen = length(generators)
-  R     = opfdata.bus_ref
+  nbus  = length(buses); nline = length(lines); ngen = length(generators)
+  R     = findall(buses.bustype .== 3)[1]
   G     = filter(x -> x ∉ R, findall(.!isempty.(opfmodeldata[:BusGenerators])))
   L     = findall(isempty.(opfmodeldata[:BusGenerators]))
   not_R = deleteat!(collect(1:nbus), R)

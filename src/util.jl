@@ -174,6 +174,8 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
       optvec=zeros(2*nbus+2*ngen)
     elseif kind == :S
       optvec=zeros(4*nbus+2*ngen)
+    elseif kind == :SC
+      optvec=zeros(MathProgBase.numvar(opfmodel))
     end
     optvec[1:ngen]=PG
     optvec[ngen+1:2*ngen]=QG
@@ -198,6 +200,8 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
       else
         consRhs = zeros(4*nbus+2*nflowlim)
       end
+    elseif kind == :SC
+      consRhs = zeros(MathProgBase.numconstr(opfmodel))
     end
     MathProgBase.eval_g(d, consRhs, optvec)
     # d = setup(opfmodel)
@@ -210,10 +214,10 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
     for l in 1:nline
       if lines[l].rateA!=0 && lines[l].rateA<1.0e10
         flowmax=(lines[l].rateA/baseMVA)^2
-        if current_rating
-          Ys = 1/((lossless ? 0.0 : lines[l].r) + lines[l].x*im);
-          flowmax/=abs(Ys)^2
-        end
+        # if current_rating
+        #   Ys = 1/((lossless ? 0.0 : lines[l].r) + lines[l].x*im);
+        #   flowmax/=abs(Ys)^2
+        # end
 
         if ( (consRhs[idx]+flowmax)  >= (1-within/100)^2*flowmax )
           ## NOTE: printing precision for low line limits may be > 100% b/c IPOPT tolerance.
@@ -423,25 +427,25 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
   Y = computeAdmittanceMatrix(opfdata, options)
 
   opfmodeldata              = Dict()
-  opfmodeldata[:lines]      = lines;
-  opfmodeldata[:buses]      = buses;
-  opfmodeldata[:generators] = generators;
-  opfmodeldata[:baseMVA]    = baseMVA;
-  opfmodeldata[:BusIdx]     = busIdx;
-  opfmodeldata[:FromLines]  = FromLines;
-  opfmodeldata[:ToLines]    = ToLines;
-  opfmodeldata[:BusGenerators]  = BusGeners;
-  opfmodeldata[:YffR]       = YffR;
-  opfmodeldata[:YffI]       = YffI;
-  opfmodeldata[:YttR]       = YttR;
-  opfmodeldata[:YttI]       = YttI;
-  opfmodeldata[:YftR]       = YftR;
-  opfmodeldata[:YftI]       = YftI;
-  opfmodeldata[:YtfR]       = YtfR;
-  opfmodeldata[:YtfI]       = YtfI;
-  opfmodeldata[:YshR]       = YshR;
-  opfmodeldata[:YshI]       = YshI;
-  opfmodeldata[:Y]          = Y;
+  opfmodeldata[:lines]      = deepcopy(lines);
+  opfmodeldata[:buses]      = deepcopy(buses);
+  opfmodeldata[:generators] = deepcopy(generators);
+  opfmodeldata[:baseMVA]    = deepcopy(baseMVA);
+  opfmodeldata[:BusIdx]     = deepcopy(busIdx);
+  opfmodeldata[:FromLines]  = deepcopy(FromLines);
+  opfmodeldata[:ToLines]    = deepcopy(ToLines);
+  opfmodeldata[:BusGenerators]  = deepcopy(BusGeners);
+  opfmodeldata[:YffR]       = deepcopy(YffR);
+  opfmodeldata[:YffI]       = deepcopy(YffI);
+  opfmodeldata[:YttR]       = deepcopy(YttR);
+  opfmodeldata[:YttI]       = deepcopy(YttI);
+  opfmodeldata[:YftR]       = deepcopy(YftR);
+  opfmodeldata[:YftI]       = deepcopy(YftI);
+  opfmodeldata[:YtfR]       = deepcopy(YtfR);
+  opfmodeldata[:YtfI]       = deepcopy(YtfI);
+  opfmodeldata[:YshR]       = deepcopy(YshR);
+  opfmodeldata[:YshI]       = deepcopy(YshI);
+  opfmodeldata[:Y]          = deepcopy(Y);
   return opfmodeldata
 end
 
@@ -464,7 +468,7 @@ function update_ratings_max!(opfdata::OPFData, options::Dict)
   Yabs2 = max.(abs2.(Y_tf), abs2.(Y_ft))
 
   if options[:current_rating] == true
-    max_ratings = (2.0 .* V_t .^2 .* V_f .^2) .* 1.0 .* Yabs2
+    max_ratings = (V_t .^2 .+ V_f .^2 .+ 2 .* (V_t .* V_f)) .* Yabs2
   else
     throw("Max power ratings not yet implemented.")
   end

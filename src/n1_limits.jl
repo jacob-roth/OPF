@@ -1,15 +1,17 @@
-function get_n1_limits(case::String, path::String,
-                       initial_loading::Float64=0.46, loading_inc::Float64=0.01,
+function get_n1_limits(case::String, path::String, options::Dict=DefaultOptions(),
+                       initial_loading::Float64=0.44, loading_inc::Float64=0.01,
                        ratings_buffer::Float64=1.25)
-    ## load data
+    ## load data & initialize
     opfdata0 = load_case(case, path, other=false);
     nbus     = length(opfdata0.buses);
     ngen     = length(opfdata0.generators);
     nload    = sum(opfdata0.buses.bustype .== 1);
-    options  = DefaultOptions();
     options[:current_rating] = true
     adjustments = DefaultAdjustments()
     max_iter = Int(ceil(initial_loading/loading_inc))
+    scm      = OPFModel(Model(), :Init, :SC)
+    scm_new  = OPFModel(Model(), :Init, :SC)
+    dp       = Dict()
 
     #
     # find max loading and limits
@@ -18,6 +20,7 @@ function get_n1_limits(case::String, path::String,
     loading = initial_loading
     iter = 1
     new_ratings = zeros(length(opfdata0.lines))
+    opfdata = deepcopy(opfdata0)
     while !feas
         println("==============================================")
         println("==========        ITERATION $iter       ==========")
@@ -82,10 +85,10 @@ function get_n1_limits(case::String, path::String,
         ## adjust ratings
         println("--> adjusting ratings")
         new_ratings = adj_ratings .* ratings_buffer
-        opfdata.lines.rateA .= new_ratings
+        opfdata.lines.rateA .= deepcopy(new_ratings)
         println("--> solving adj-ratings sc-acopf")
         scm_new = scacopf_model(opfdata, options, adjustments, c)
-        @time scm_new = scacopf_solve(scm, opfdata, options, c)
+        @time scm_new = scacopf_solve(scm_new, opfdata, options, c)
 
         ## update infeasibility
         feas = scm_new.status == :Optimal
@@ -95,5 +98,5 @@ function get_n1_limits(case::String, path::String,
             break
         end
     end
-    return opfdata, dp, scm
+    return opfdata, dp, scm_new
 end
