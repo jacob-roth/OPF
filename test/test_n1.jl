@@ -5,18 +5,15 @@ options[:remove_Bshunt]  = true
 options[:remove_tap]     = true
 
 opfdata, dp, scm = get_n1_limits("case118", path, options, 0.45)
+# opfdata, dp, scm = get_n1_limits("case118", path, options, 0.57)  ## this works too...
+opfdata, dp, scm = get_n1_limits("case30", path, options, 0.58)
 acopf_outputAll(scm, opfdata, options)
-# d  = setup(scm.m);
-# x  = MathProgBase.getsolution(scm.m.internalModel);
-# F1 = d.subexpressions_as_julia_expressions[236+1]
-# F2 = d.subexpressions_as_julia_expressions[236+2]
-# F3 = d.subexpressions_as_julia_expressions[236+3]
-# flowmax = (opfdata.lines.rateA ./ 100).^2
-# flowmax1 = (new_ratings[1]/100)^2
-# flowmax2 = (new_ratings[2]/100)^2
-# flowmax3 = (new_ratings[3]/100)^2
-#
-# e = [getvalue(scm.m[Symbol("F$(i)")]) for i in 1:186]
-# (e + flowmax) ./ flowmax
-#
-# (e - opfdata.lines.rateA) ./ opfdata.lines.rateA
+
+# casedata = load_case("30-files/"* "n1-lowdamp", "/Users/jakeroth/Desktop/planning-large-deviation/data/cases", other=true)
+# dm = acopf_model(casedata.opf)
+# dm = acopf_solve(dm, casedata.opf)
+# V̄a = deepcopy(getvalue(getindex(dm.m, :Va)))
+# V̄a .-= V̄a[casedata.opf.bus_ref]
+# V̄m = deepcopy(getvalue(getindex(dm.m, :Vm)))
+# P̄g = deepcopy(getvalue(getindex(dm.m, :Pg)))
+# Q̄g = deepcopy(getvalue(getindex(dm.m, :Qg)))
