@@ -6,7 +6,7 @@ options[:remove_tap]     = true
 
 opfdata, dp, scm = get_n1_limits("case118", path, options, 0.45)
 # opfdata, dp, scm = get_n1_limits("case118", path, options, 0.57)  ## this works too...
-opfdata, dp, scm = get_n1_limits("case30", path, options, 0.58)
+# opfdata, dp, scm = get_n1_limits("case30", path, options, 0.58)
 acopf_outputAll(scm, opfdata, options)
 
 # casedata = load_case("30-files/"* "n1-lowdamp", "/Users/jakeroth/Desktop/planning-large-deviation/data/cases", other=true)

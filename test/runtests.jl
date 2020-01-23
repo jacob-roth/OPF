@@ -12,12 +12,11 @@ import Pkg
 Pkg.activate(dirname(dirname(dirname(path))))
 Pkg.instantiate()
 using Test
-using MPCCases, Printf, MAT
+using MPCCases, Printf
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra, Distributions
 using NLsolve
-# using OPF
-include("../src/OPF.jl")
+include("../src/OPF.jl") # stand-in for "using OPF"
 
 ## -----------------------------------------------------------------------------
 ## test cases
@@ -34,3 +33,5 @@ for c in ["case9", "case30", "case118"]
     include("test_compare.jl")           ## compare with Anirudh's model
     include("test_pfe.jl")               ## test power flow equation calcs (vectorized, MatPower, and entrywise)
 end
+
+include("test_n1.jl")
