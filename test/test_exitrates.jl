@@ -6,7 +6,7 @@ options[:remove_tap]     = true
 
 opfdata = load_case("case30", path; other=false)
 opfmodel = acopf_model(opfdata, options)
-opfmodel = acopf_solve(opfmodel, opfdata)
+opfmodel = acopf_solve_exitrates(opfmodel, opfdata, options)
 acopf_outputAll(opfmodel, opfdata, options)
 # V̄a = deepcopy(getvalue(getindex(dm.m, :Va)))
 # V̄a .-= V̄a[casedata.opf.bus_ref]

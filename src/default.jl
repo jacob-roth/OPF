@@ -27,7 +27,8 @@ function DefaultOptions()
   D[:temperature]    = 0.0001  ## temperature
   D[:emergencylimit] = 1.2     ## line limits will be multiplied by this factor
   D[:shed_load]      = true    ## shed load?
-  D[:VOLL]           = 5000.0  ## value of lost load if shedding load
+  D[:ratelimit]      = 10.0    ## max upper bound on the transition rates
+  D[:iterlim]        = Inf     ## max number of rounds of adding constraints
   return D
 end
 
