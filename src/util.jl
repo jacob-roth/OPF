@@ -170,42 +170,10 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
 
   if nflowlim>0
     println("Number of lines with flow limits: ", nflowlim)
-    if kind == :D
-      optvec=zeros(2*nbus+2*ngen)
-    elseif kind == :S
-      optvec=zeros(4*nbus+2*ngen)
-    elseif kind == :SC
-      optvec=zeros(MathProgBase.numvar(opfmodel))
-    end
-    optvec[1:ngen]=PG
-    optvec[ngen+1:2*ngen]=QG
-    optvec[2*ngen+1:2*ngen+nbus]=VM
-    optvec[2*ngen+nbus+1:2*ngen+2*nbus]=VA
-    if kind == :S
-      optvec[2*ngen+2*nbus+1:2*ngen+3*nbus]=PD
-      optvec[2*ngen+3*nbus+1:2*ngen+4*nbus]=QD
-    end
-
     d = JuMP.NLPEvaluator(opfmodel)
     MathProgBase.initialize(d, [:Jac])
-    if kind == :D
-      if current_rating == true
-        consRhs = zeros(2*nbus+nflowlim)
-      else
-        consRhs = zeros(2*nbus+2*nflowlim)
-      end
-    elseif kind ==:S
-      if current_rating == true
-        consRhs = zeros(4*nbus+nflowlim)
-      else
-        consRhs = zeros(4*nbus+2*nflowlim)
-      end
-    elseif kind == :SC
-      consRhs = zeros(MathProgBase.numconstr(opfmodel))
-    end
-    MathProgBase.eval_g(d, consRhs, optvec)
-    # d = setup(opfmodel)
-    # c!(consRhs, optvec, model=d)
+    consRhs = zeros(MathProgBase.numconstr(opfmodel))
+    MathProgBase.eval_g(d, consRhs, internalmodel(opfmodel).inner.x)
 
     @printf("================ Lines within %d %% of flow capacity ===================\n", within)
     println("Line   From Bus    To Bus    At capacity")
