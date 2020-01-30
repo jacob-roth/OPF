@@ -20,6 +20,14 @@ function DefaultOptions()
   D[:zip]            = zip0
   D[:sol]            = sol0
   D[:tol]            = 1e-9
+  #
+  # Options for enforcing transition rate limits
+  #
+  D[:damping]        = 0.01    ## damping coefficient
+  D[:temperature]    = 0.0001  ## temperature
+  D[:emergencylimit] = 1.2     ## line limits will be multiplied by this factor
+  D[:shed_load]      = true    ## shed load?
+  D[:VOLL]           = 5000.0  ## value of lost load if shedding load
   return D
 end
 

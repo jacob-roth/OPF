@@ -5,7 +5,7 @@ options[:remove_Bshunt]  = true
 options[:remove_tap]     = true
 
 opfdata = load_case("case30", path; other=false)
-opfmodel = acopf_model(opfdata)
+opfmodel = acopf_model(opfdata, options)
 opfmodel = acopf_solve(opfmodel, opfdata)
 acopf_outputAll(opfmodel, opfdata, options)
 # V̄a = deepcopy(getvalue(getindex(dm.m, :Va)))
