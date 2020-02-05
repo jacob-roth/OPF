@@ -142,19 +142,22 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
   println("Objective value: ", getobjectivevalue(opfmodel), "USD/hr")
   VM=getvalue(getindex(opfmodel,:Vm)); VA=getvalue(getindex(opfmodel,:Va))
   PG=getvalue(getindex(opfmodel,:Pg)); QG=getvalue(getindex(opfmodel,:Qg))
+  PS=getvalue(getindex(opfmodel,:Ps)); QS=getvalue(getindex(opfmodel,:Qs))
   if kind == :S
     PD=getvalue(getindex(opfmodel,:Pd)); QD=getvalue(getindex(opfmodel,:Qd))
   end
 
   println("============================= BUSES ==================================")
-  println("  BUS    Vm     Va    |   Pg (MW)    Qg(MVAr) ")   # |    P (MW)     Q (MVAr)")  #|         (load)   ")
+  println("  BUS    Vm     Va    |   Pg (MW)    Qg(MVAr)|   Ps (MW)    Qs(MVAr)  ")
 
-  println("                      |     (generation)      ")
+  println("                      |     (generation)     |     (shedding)     ")
   println("----------------------------------------------------------------------")
   for i in 1:nbus
-    @printf("%4d | %6.2f  %6.2f | %s  | \n",
+    @printf("%4d | %6.2f  %6.2f | %s  | %s     %s   |\n",
 	    buses[i].bus_i, VM[i], VA[i]*180/pi,
-	    (length(BusGeners[i])==0) ? "   --          --  " : @sprintf("%7.2f     %7.2f", baseMVA*PG[BusGeners[i][1]], baseMVA*QG[BusGeners[i][1]]))
+	    (length(BusGeners[i])==0) ? "   --          --  " : @sprintf("%7.2f     %7.2f", baseMVA*PG[BusGeners[i][1]], baseMVA*QG[BusGeners[i][1]]),
+      PS[i]<1e-3 ? "   --  " : @sprintf("%7.2f", PS[i]),
+      QS[i]<1e-3 ? "   --  " : @sprintf("%7.2f", QS[i]))
   end
   println("\n")
 
@@ -394,6 +397,23 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
                                                       lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
   Y = computeAdmittanceMatrix(opfdata, options)
 
+  # helpful quantities
+  nonLoadBuses = findall(!isempty, BusGeners)
+  push!(nonLoadBuses, opfdata.bus_ref)
+  sort!(nonLoadBuses)
+  unique!(nonLoadBuses)
+  linindex_VMr = zeros(Int64, nbus)
+  linindex_VAr = zeros(Int64, nbus)
+  i = 0
+  for n in 1:nbus
+    n in nonLoadBuses && continue
+    linindex_VMr[n] = i+=1
+  end
+  for n in 1:nbus
+    n == opfdata.bus_ref && continue
+    linindex_VAr[n] = i+=1
+  end
+
   opfmodeldata              = Dict()
   opfmodeldata[:lines]      = deepcopy(lines);
   opfmodeldata[:buses]      = deepcopy(buses);
@@ -414,6 +434,12 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
   opfmodeldata[:YshR]       = deepcopy(YshR);
   opfmodeldata[:YshI]       = deepcopy(YshI);
   opfmodeldata[:Y]          = deepcopy(Y);
+  opfmodeldata[:nonLoadBuses] = deepcopy(nonLoadBuses);
+  opfmodeldata[:bus_ref]    = opfdata.bus_ref;
+  opfmodeldata[:nbus]       = nbus
+  opfmodeldata[:nloads]     = nbus - length(nonLoadBuses)
+  opfmodeldata[:linindex_VMr] = deepcopy(linindex_VMr)
+  opfmodeldata[:linindex_VAr] = deepcopy(linindex_VAr)
   return opfmodeldata
 end
 

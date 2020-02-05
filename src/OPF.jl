@@ -1,6 +1,6 @@
 # module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
-using SparseArrays, LinearAlgebra, NLsolve
+using SparseArrays, LinearAlgebra, NLsolve, ForwardDiff
 using MatrixNetworks, StructArrays, Distributed ## for setting n-1 limits
 using MPCCases
 using Printf
@@ -59,6 +59,9 @@ export jac_z
 
 include("sensitivities.jl")
 export get_Gamma, get_Gamma_fd, get_Gamma_ew
+
+include("exitrates.jl")
+export acopf_solve_exitrates, compute_exitrate_kkt
 
 # include("acopf_n1_limits.jl")
 # export set_n1_limits!

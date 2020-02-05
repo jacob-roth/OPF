@@ -1,6 +1,8 @@
 function add_p_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c::Int64=0)
   Pg0        = opfmodel[:Pg]
   Qg0        = opfmodel[:Qg]
+  Ps0        = opfmodel[:Ps]
+  Qs0        = opfmodel[:Qs]
   Vm0        = opfmodel[:Vm]
   Va0        = opfmodel[:Va]
   lines      = opfmodeldata[:lines];
@@ -32,11 +34,15 @@ function add_p_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
   if c == 0
     Pg = Pg0
     Qg = Qg0
+    Ps = Ps0
+    Qs = Qs0
     Vm = Vm0
     Va = Va0
   else
     Pg = opfmodel[Symbol("Pg_$(c)_container")]
     Qg = opfmodel[Symbol("Qg_$(c)_container")]
+    Ps = opfmodel[Symbol("Ps_$(c)_container")]
+    Qs = opfmodel[Symbol("Qs_$(c)_container")]
     Vm = opfmodel[Symbol("Vm_$(c)_container")]
     Va = opfmodel[Symbol("Va_$(c)_container")]
     # Pg    = Array{Variable,1}(undef, ngen)
@@ -79,6 +85,7 @@ function add_p_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
     + sum( Vm[b]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[b]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[b]-Va[busIdx[lines[l].to]]  )) for l in FromLines[b] )
     + sum( Vm[b]*Vm[busIdx[lines[l].from]]*( YtfR[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfI[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]   )
     - ( sum(baseMVA*Pg[g] for g in BusGeners[b]) - buses[b].Pd ) / baseMVA      # Sbus part
+    - ( Ps[b] / baseMVA )
     )
   @NLconstraint(opfmodel, P_b==0)
   if c == 0
@@ -92,6 +99,8 @@ end
 function add_q_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c::Int64=0)
   Pg0        = opfmodel[:Pg]
   Qg0        = opfmodel[:Qg]
+  Ps0        = opfmodel[:Ps]
+  Qs0        = opfmodel[:Qs]
   Vm0        = opfmodel[:Vm]
   Va0        = opfmodel[:Va]
   lines      = opfmodeldata[:lines];
@@ -123,11 +132,15 @@ function add_q_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
   if c == 0
     Pg = Pg0
     Qg = Qg0
+    Ps = Ps0
+    Qs = Qs0
     Vm = Vm0
     Va = Va0
   else
     Pg = opfmodel[Symbol("Pg_$(c)_container")]
     Qg = opfmodel[Symbol("Qg_$(c)_container")]
+    Ps = opfmodel[Symbol("Ps_$(c)_container")]
+    Qs = opfmodel[Symbol("Qs_$(c)_container")]
     Vm = opfmodel[Symbol("Vm_$(c)_container")]
     Va = opfmodel[Symbol("Va_$(c)_container")]
     # Pg    = Array{Variable,1}(undef, ngen)
@@ -167,6 +180,7 @@ function add_q_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
     + sum( Vm[b]*Vm[busIdx[lines[l].to]]  *(-YftI[l]*cos(Va[b]-Va[busIdx[lines[l].to]]  ) + YftR[l]*sin(Va[b]-Va[busIdx[lines[l].to]]  )) for l in FromLines[b] )
     + sum( Vm[b]*Vm[busIdx[lines[l].from]]*(-YtfI[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfR[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]   )
     - ( sum(baseMVA*Qg[g] for g in BusGeners[b]) - buses[b].Qd ) / baseMVA      #Sbus part
+    - ( Qs[b] / baseMVA )
     )
   @NLconstraint(opfmodel, Q_b==0)
   if c == 0
