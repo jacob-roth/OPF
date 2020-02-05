@@ -3,6 +3,8 @@ options[:current_rating] = true
 options[:lossless]       = true
 options[:remove_Bshunt]  = true
 options[:remove_tap]     = true
+options[:shed_load] 	 = true
+options[:ratelimit]      = 1.0
 
 opfdata = load_case("case30", path; other=false)
 opfmodel = acopf_model(opfdata, options)
