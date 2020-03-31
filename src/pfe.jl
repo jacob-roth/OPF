@@ -28,6 +28,17 @@ function PF(Vm::AbstractArray, Va::AbstractArray, Y::AbstractArray)
     end
     return FP, FQ
 end
+function PF(Vm::AbstractArray, Va::AbstractArray, Y::AbstractArray, pidx::AbstractArray{T,1}, qidx::AbstractArray{T,1}) where {T <: Integer}
+    @assert(length(Vm) == length(Va)); nbus = length(Vm)
+    FP = zeros(eltype(Vm), length(pidx)); FQ = zeros(eltype(Vm), length(qidx))
+    for i in eachindex(pidx)
+        FP[i] = P_i(Vm, Va, pidx[i], Y)
+    end
+    for i in eachindex(qidx)
+        FQ[i] = Q_i(Vm, Va, qidx[i], Y)
+    end
+    return FP, FQ
+end
 function PFE(Vm::AbstractArray, Va::AbstractArray, Y::AbstractArray,
              Pnet::AbstractArray, Qnet::AbstractArray)
     FP, FQ = PF(Vm, Va, Y)
