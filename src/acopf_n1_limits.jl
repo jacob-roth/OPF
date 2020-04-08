@@ -1,4 +1,4 @@
-function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_scale=1.25, max_iter=10)
+function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol::Union{Int, Float64}=1e-6, solve_scale::Union{Int, Float64}=1.25, max_iter::Int=10)
     ## shortcuts
     lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
     busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
@@ -61,7 +61,7 @@ function adjust_feas_ratings!(opfdata::OPFData, options::Dict, point::Dict, tol=
     @assert(feas == true)
     nothing
 end
-function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scale=1.05, max_iter=10, pct=1.0)
+function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, feas_tol=1e-6, scale=1.05, max_iter=10, pct=1.0)
     """
     modify `opfdata.lines.rateA` so that `acopf_solve` reaches an optimal point beginning from `point`
     by adjusting ratings according to
