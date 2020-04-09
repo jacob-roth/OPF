@@ -1,4 +1,4 @@
-function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_scale=1.25, max_iter=10)
+function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_scale=1.25, max_iter=10, pct=0.1)
     ## shortcuts
     lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
     busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
@@ -22,7 +22,7 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, feas_tol=1e-6, solve_sc
     for l in nonislanding_lines
         println("========== REMOVING LINE $l        ==========")
         rl = remove_line!(opfdata, l)
-        solved, M, point = adjust_solv_ratings!(opfdata, options, point, solve_scale, max_iter)
+        solved, M, point = adjust_solv_ratings!(opfdata, options, point, solve_scale, max_iter, pct)
         reinstate_line!(opfdata, l, rl)
     end
 
@@ -61,7 +61,7 @@ function adjust_feas_ratings!(opfdata::OPFData, options::Dict, point::Dict, tol=
     @assert(feas == true)
     nothing
 end
-function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scale=1.05, max_iter=10, pct=1.0)
+function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scale=1.05, max_iter=10, pct=0.1)
     """
     modify `opfdata.lines.rateA` so that `acopf_solve` reaches an optimal point beginning from `point`
     by adjusting ratings according to
@@ -74,10 +74,10 @@ function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scal
         println("~~~~~~~~~~ inner solve iteration $iter ~~~~~~~~~~")
         infeas_x = MathProgBase.getsolution(M.m.internalModel)
         infeas_point = Dict()
-        infeas_point[:Pg] = infeas_x[[x.col for x in getindex(M.m, :Pg)]]
-        infeas_point[:Qg] = infeas_x[[x.col for x in getindex(M.m, :Qg)]]
-        infeas_point[:Vm] = infeas_x[[x.col for x in getindex(M.m, :Vm)]]
-        infeas_point[:Va] = infeas_x[[x.col for x in getindex(M.m, :Va)]]
+        infeas_point[:Pg] = deepcopy(infeas_x[[x.col for x in getindex(M.m, :Pg)]])
+        infeas_point[:Qg] = deepcopy(infeas_x[[x.col for x in getindex(M.m, :Qg)]])
+        infeas_point[:Vm] = deepcopy(infeas_x[[x.col for x in getindex(M.m, :Vm)]])
+        infeas_point[:Va] = deepcopy(infeas_x[[x.col for x in getindex(M.m, :Va)]])
         adjust_feas_ratings!(opfdata, options, infeas_point, feas_tol)
         bus_adj_hi = findall((opfdata.buses.Vmax .- infeas_point[:Vm])  ./ opfdata.buses.Vmax .> pct/100)
         bus_adj_lo = findall((infeas_point[:Vm]  .- opfdata.buses.Vmin) ./ opfdata.buses.Vmin .> pct/100)
@@ -96,6 +96,9 @@ function adjust_solv_ratings!(opfdata::OPFData, options::Dict, point::Dict, scal
         end
         if any(opfdata.lines.rateA .> 1e7)
             throw(ErrorException("Maximum line limit increase reached."))
+        end
+        if solved == true
+            break
         end
     end
     return solved, M, point
