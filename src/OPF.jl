@@ -15,7 +15,7 @@ end
 export OPFModel
 
 include("default.jl")
-export DefaultOptions
+export DefaultOptions, DefaultAdjustments
 
 include("constraints.jl")
 export add_p_constraint!, add_q_constraint!
@@ -45,6 +45,7 @@ export acopf_outputAll, get_values
 export RGL_id, RGL_idx, model_idx
 export PQnet
 export get_opfmodeldata
+export get_contingencies
 
 include("pfe.jl")
 export P_i, Q_i

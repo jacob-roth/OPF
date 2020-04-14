@@ -90,6 +90,7 @@ function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, co
   end
   return opfmodel, status
 end
+
 function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false); return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind); end
 
 # Compute initial point for IPOPT based on the values provided in the case data
@@ -398,32 +399,31 @@ function nonunique(x::AbstractArray{T}) where T
 end
 
 function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
-  # parse options
-  lossless       = options[:lossless]
-  current_rating = options[:current_rating]
-  remove_Bshunt  = options[:remove_Bshunt]
-  remove_tap     = options[:remove_tap]
-  print_level    = options[:print_level]
-  feasibility    = options[:feasibility]
-  Pg_hi          = adjustments[:Pg_hi]
-  Pg_lo          = adjustments[:Pg_lo]
-  Qg_hi          = adjustments[:Qg_hi]
-  Qg_lo          = adjustments[:Qg_lo]
-  Vm_hi          = adjustments[:Vm_hi]
-  Vm_lo          = adjustments[:Vm_lo]
-  if lossless && !current_rating
-    println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
-    current_rating = true
-  end
+    # parse options
+    lossless       = options[:lossless]
+    current_rating = options[:current_rating]
+    remove_Bshunt  = options[:remove_Bshunt]
+    remove_tap     = options[:remove_tap]
+    print_level    = options[:print_level]
+    feasibility    = options[:feasibility]
+    Pg_hi          = adjustments[:Pg_hi]
+    Pg_lo          = adjustments[:Pg_lo]
+    Qg_hi          = adjustments[:Qg_hi]
+    Qg_lo          = adjustments[:Qg_lo]
+    Vm_hi          = adjustments[:Vm_hi]
+    Vm_lo          = adjustments[:Vm_lo]
+    if lossless && !current_rating
+        println("warning: lossless assumption requires `current_rating` instead of `power_rating`\n")
+        current_rating = true
+    end
 
   # shortcuts for compactness
-  lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
-  busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
-  nbus = length(buses); nline = length(lines); ngen = length(generators)
+    lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
+    busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
 
   # branch admitances
-  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA;
-                                                      lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
+  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA, lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
+
   Y = computeAdmittanceMatrix(opfdata, options)
 
   opfmodeldata              = Dict()
@@ -591,7 +591,8 @@ end
 
 function remove_line!(opfdata::OPFData, l::Int64, verb::Bool=false)
     lines = [x for x in opfdata.lines]
-    removed = l ∉ [x.id for x in lines]
+    line_indices = get_line_indices(opfdata)
+    removed = l ∉ line_indices
     if !removed
         if verb; println("removing line $l"); end
         rl = splice!(lines, l)
@@ -625,7 +626,6 @@ function reinstate_line!(opfdata::OPFData, l::Int64, rl::MPCCases.Line, verb::Bo
     nothing
 end
 
-
 function set_initial_limits!(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
     ## set ratings at maximum ratings
     update_ratings_max!(opfdata, options)
@@ -643,8 +643,9 @@ end
 
 function get_contingencies(opfdata::OPFData, options::Dict=DefaultOptions())
     contingencies = Dict()
-    nonislanding_lines = get_nonislanding_lines(opfdata, options)
-    for l in nonislanding_lines
+    # nonislanding_lines = get_nonislanding_lines(opfdata, options)
+    line_indices = get_line_indices(opfdata)
+    for l in line_indices
         contingencies[l] = (c_type=:line, asset=deepcopy(opfdata.lines[l]))
     end
     return contingencies
@@ -665,7 +666,6 @@ function update_ratings_flowviol!(point::Dict, opfdata::OPFData, options::Dict,
         opfdata.lines.rateA[lines] .= adj_ratings[lines] .* (1.0 + buffer)
     end
 end
-
 
 function check_feasibility(check_point::Dict, opfdata::OPFData, options::Dict, feas_tol=DefaultFeasTol())
     """
@@ -722,4 +722,8 @@ function check_feasibility(check_point::Dict, opfdata::OPFData, options::Dict, f
     else
         return false, infeas_dict
     end
+end
+
+function get_line_indices(opfdata::OPFData)
+    return eachindex(opfdata.lines)
 end

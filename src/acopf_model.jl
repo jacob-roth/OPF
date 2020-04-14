@@ -3,7 +3,7 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   # model
   #
   opfmodeldata = get_opfmodeldata(opfdata, options, adjustments)
-  opfmodel     = Model(solver=IpoptSolver(print_level=options[:print_level], tol=options[:tol]))
+  opfmodel = Model(solver=IpoptSolver(print_level=options[:print_level], tol=options[:tol]))
   nbus = length(opfmodeldata[:buses]); nline = length(opfmodeldata[:lines]); ngen = length(opfmodeldata[:generators])
 
   ## bound constrained variables
@@ -20,9 +20,8 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   if options[:feasibility] == true
     @NLobjective(opfmodel, Min, 0)
   else
-    @NLobjective(opfmodel, Min, sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*Pg[i])^2
-                                    +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*Pg[i])
-                                    +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:ngen))
+    @NLobjective(opfmodel, Min, sum(opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2] * (opfmodeldata[:baseMVA] * Pg[i]) ^ 2 + opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1] * (opfmodeldata[:baseMVA] * Pg[i]) +
+    opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n] for i=1:ngen))
   end
 
   #
@@ -49,7 +48,7 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   end
 
   if options[:print_level] >= 1
-    @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
+    @printf("Buses: %d  Lines: %d  Generators: %d \n", nbus, nline, ngen)
   end
   return OPFModel(opfmodel, :InitData, :D)
 end
