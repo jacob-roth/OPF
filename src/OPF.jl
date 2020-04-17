@@ -48,7 +48,9 @@ export acopf_outputAll, get_values
 export RGL_id, RGL_idx, model_idx
 export PQnet
 export get_opfmodeldata
-export get_contingencies
+export get_all_contingencies
+export remove_line!, reinstate_line!
+export get_flowmag2s, get_ratings
 
 include("pfe.jl")
 export P_i, Q_i

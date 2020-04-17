@@ -1,4 +1,4 @@
-function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),                adjustments::Dict=DefaultAdjustments(), current_rating_bool::Bool=true)
+function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),                adjustments::Dict=DefaultAdjustments(), contingencies::Dict=Dict(), current_rating_bool::Bool=true)
 
     ## setup
     options[:current_rating] = current_rating_bool
@@ -15,10 +15,9 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),        
     M = acopf_model(opfdata, options, adjustments)
     m = M.m
 
-    contingencies = get_contingencies(opfdata, options)
     ## add contingency security constraints
     if !isempty(contingencies)
-        for c_id in 1:nline
+        for c_id in keys(contingencies)
             #
             # contingency (line removal)
             #
