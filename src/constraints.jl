@@ -178,7 +178,7 @@ function add_q_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
   JuMP.registerobject(opfmodel, Symbol(Qb), Q_b, Qb)
 end
 
-function add_line_current_constraint!(opfmodel::JuMP.Model, line_indices, opfmodeldata::Dict, l::Int64, c::Int64=0)
+function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, l::Int64, c::Int64=0)
     Pg0        = opfmodel[:Pg]
     Qg0        = opfmodel[:Qg]
     Vm0        = opfmodel[:Vm]
@@ -216,7 +216,7 @@ function add_line_current_constraint!(opfmodel::JuMP.Model, line_indices, opfmod
         Va = opfmodel[Symbol("Va_$(c)_container")]
     end
 
-    line = lines[l]
+    line = lines[lines.id .== l][1]
     if line.rateA != 0 && line.rateA < 1.0e10
         flowmax=(line.rateA/baseMVA)^2
         # branch current flows

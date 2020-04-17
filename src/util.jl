@@ -26,6 +26,7 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   end
   return opfmodel, status
 end
+
 function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind); end
 
 function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
@@ -41,57 +42,59 @@ function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   end
   return opfmodel, status
 end
+
 function acpf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acpf_solve(M.m, opfdata)..., M.kind); end
 
-function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, contingencies::Dict, warm_point=false)
-  nbus = length(opfdata.buses); nline = length(opfdata.lines); ngen = length(opfdata.generators)
-  R     = opfdata.bus_ref
-  G     = filter(x -> x ∉ R, findall(.!isempty.(opfdata.BusGenerators)))
-  L     = findall(isempty.(opfdata.BusGenerators))
-  not_R = deleteat!(collect(1:nbus), R)
+function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, contingencies::Dict=Dict(), warm_point=false, current_rating_bool::Bool=true)
+    options[:current_rating] = current_rating_bool
+    nbus = length(opfdata.buses); nline = length(opfdata.lines); ngen = length(opfdata.generators)
+    R     = opfdata.bus_ref
+    G     = filter(x -> x ∉ R, findall(.!isempty.(opfdata.BusGenerators)))
+    L     = findall(isempty.(opfdata.BusGenerators))
+    not_R = deleteat!(collect(1:nbus), R)
 
-  #
-  # initial point - needed especially for pegase cases
-  #
-  if warm_point == false
-    Pg0,Qg0,Vm0,Va0 = acopf_initialPt_IPOPT(opfdata)
-  else
-    Pg0 = warm_point[:Pg]
-    Qg0 = warm_point[:Qg]
-    Vm0 = warm_point[:Vm]
-    Va0 = warm_point[:Va]
-  end
-  ## initial dispatch point
-  setvalue(getindex(opfmodel, :Pg), Pg0)
-  setvalue(getindex(opfmodel, :Qg), Qg0)
-  setvalue(getindex(opfmodel, :Vm), Vm0)
-  setvalue(getindex(opfmodel, :Va), Va0)
-
-  dp_0, m_0 = get_dispatch_point(opfdata, options)
-  for c_id in keys(contingencies)
-    for gi in zip([G; R], [first.(opfdata.BusGenerators[G]); first.(opfdata.BusGenerators[R])])
-      g = gi[1]
-      i = gi[2]
-      setvalue(getindex(opfmodel, Symbol("Qg_$(c_id)"))[g], dp_0[:Qg][i])
+    #
+    # initial point - needed especially for pegase cases
+    #
+    if warm_point == false
+        Pg0,Qg0,Vm0,Va0 = acopf_initialPt_IPOPT(opfdata)
+    else
+        Pg0 = warm_point[:Pg]
+        Qg0 = warm_point[:Qg]
+        Vm0 = warm_point[:Vm]
+        Va0 = warm_point[:Va]
     end
-    for i in L
-      setvalue(getindex(opfmodel, Symbol("Vm_$(c_id)"))[i], dp_0[:Vm][i])
-    end
-    for i in not_R
-      setvalue(getindex(opfmodel, Symbol("Va_$(c_id)"))[i], dp_0[:Va][i])
-    end
-  end
+    ## initial dispatch point
+    setvalue(getindex(opfmodel, :Pg), Pg0)
+    setvalue(getindex(opfmodel, :Qg), Qg0)
+    setvalue(getindex(opfmodel, :Vm), Vm0)
+    setvalue(getindex(opfmodel, :Va), Va0)
 
-  status = :IpoptInit
-  status = solve(opfmodel)
+    dp_0, m_0 = get_dispatch_point(opfdata, options)
+    for c_id in keys(contingencies)
+        for gi in zip([G; R], [first.(opfdata.BusGenerators[G]); first.(opfdata.BusGenerators[R])])
+            g = gi[1]
+            i = gi[2]
+            setvalue(getindex(opfmodel, Symbol("Qg_$(c_id)"))[g], dp_0[:Qg][i])
+        end
+        for i in L
+            setvalue(getindex(opfmodel, Symbol("Vm_$(c_id)"))[i], dp_0[:Vm][i])
+        end
+        for i in not_R
+            setvalue(getindex(opfmodel, Symbol("Va_$(c_id)"))[i], dp_0[:Va][i])
+        end
+    end
 
-  if status != :Optimal
-    println("Could not solve the model to optimality.")
-  end
-  return opfmodel, status
+    status = :IpoptInit
+    status = solve(opfmodel)
+
+    if status != :Optimal
+        println("Could not solve the model to optimality.")
+    end
+    return opfmodel, status
 end
 
-function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false); return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind); end
+function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies::Dict=Dict(), warm_point=false); return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies, warm_point)..., M.kind); end
 
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
@@ -119,6 +122,7 @@ function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
 
   return Pg,Qg,Vm,Va
 end
+
 function acopf_initialPt_IPOPT_point(opfdata::MPCCases.OPFData)
   Pg, Qg, Vm, Va = acopf_initialPt_IPOPT(opfdata)
   point = Dict()
@@ -292,6 +296,7 @@ function RGL_idx(buses_RGL_id::Dict, gens_RG_id::Dict, busIdx::Dict)
     g_RG_idx[:G] = gens_RG_id[:G]
     return b_RGL_idx, g_RG_idx
 end
+
 function RGL_idx(opfdata::OPFData)
     buses_RGL, gens_RG = RGL_id(opfdata)
     return RGL_idx(buses_RGL, gens_RG, opfdata.BusIdx)
@@ -417,36 +422,36 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
         current_rating = true
     end
 
-  # shortcuts for compactness
+    # shortcuts for compactness
     lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
     busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
 
-  # branch admitances
-  YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA, lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
+    # branch admitances
+    YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA, lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
 
-  Y = computeAdmittanceMatrix(opfdata, options)
+    Y = computeAdmittanceMatrix(opfdata, options)
 
-  opfmodeldata              = Dict()
-  opfmodeldata[:lines]      = deepcopy(lines);
-  opfmodeldata[:buses]      = deepcopy(buses);
-  opfmodeldata[:generators] = deepcopy(generators);
-  opfmodeldata[:baseMVA]    = deepcopy(baseMVA);
-  opfmodeldata[:BusIdx]     = deepcopy(busIdx);
-  opfmodeldata[:FromLines]  = deepcopy(FromLines);
-  opfmodeldata[:ToLines]    = deepcopy(ToLines);
-  opfmodeldata[:BusGenerators]  = deepcopy(BusGeners);
-  opfmodeldata[:YffR]       = deepcopy(YffR);
-  opfmodeldata[:YffI]       = deepcopy(YffI);
-  opfmodeldata[:YttR]       = deepcopy(YttR);
-  opfmodeldata[:YttI]       = deepcopy(YttI);
-  opfmodeldata[:YftR]       = deepcopy(YftR);
-  opfmodeldata[:YftI]       = deepcopy(YftI);
-  opfmodeldata[:YtfR]       = deepcopy(YtfR);
-  opfmodeldata[:YtfI]       = deepcopy(YtfI);
-  opfmodeldata[:YshR]       = deepcopy(YshR);
-  opfmodeldata[:YshI]       = deepcopy(YshI);
-  opfmodeldata[:Y]          = deepcopy(Y);
-  return opfmodeldata
+    opfmodeldata              = Dict()
+    opfmodeldata[:lines]      = deepcopy(lines);
+    opfmodeldata[:buses]      = deepcopy(buses);
+    opfmodeldata[:generators] = deepcopy(generators);
+    opfmodeldata[:baseMVA]    = deepcopy(baseMVA);
+    opfmodeldata[:BusIdx]     = deepcopy(busIdx);
+    opfmodeldata[:FromLines]  = deepcopy(FromLines);
+    opfmodeldata[:ToLines]    = deepcopy(ToLines);
+    opfmodeldata[:BusGenerators]  = deepcopy(BusGeners);
+    opfmodeldata[:YffR]       = deepcopy(YffR);
+    opfmodeldata[:YffI]       = deepcopy(YffI);
+    opfmodeldata[:YttR]       = deepcopy(YttR);
+    opfmodeldata[:YttI]       = deepcopy(YttI);
+    opfmodeldata[:YftR]       = deepcopy(YftR);
+    opfmodeldata[:YftI]       = deepcopy(YftI);
+    opfmodeldata[:YtfR]       = deepcopy(YtfR);
+    opfmodeldata[:YtfI]       = deepcopy(YtfI);
+    opfmodeldata[:YshR]       = deepcopy(YshR);
+    opfmodeldata[:YshI]       = deepcopy(YshI);
+    opfmodeldata[:Y]          = deepcopy(Y);
+    return opfmodeldata
 end
 
 function update_loadings!(opfdata::OPFData, options::Dict,
@@ -533,7 +538,7 @@ end
 function get_flowmag2s(VM::Array{Float64,1}, VA::Array{Float64,1}, Y::AbstractArray, opfdata::OPFData, options::Dict, c::Bool=false)
     lines = opfdata.lines; busIdx = opfdata.BusIdx; nline = length(lines)
     if c == true
-      nline_orig = nline+1
+      nline_orig = nline + 1
     else
       nline_orig = nline
     end
@@ -541,16 +546,16 @@ function get_flowmag2s(VM::Array{Float64,1}, VA::Array{Float64,1}, Y::AbstractAr
     for l in 1:nline_orig
         line = lines[(lines.id .== l)]
         if !isempty(line)
-          line = first(line)
-          f = line.from; t = line.to
-          Y_tf = Y[t, f]; Y_ft = Y[f, t]
-          ## NOTE: current from Frank & Rebennack OPF primer: eq 5.11 where turns/tap ratios are accounted for in `Y`
-          Vm_f = VM[busIdx[f]]; Va_f = VA[busIdx[f]]
-          Vm_t = VM[busIdx[t]]; Va_t = VA[busIdx[t]]
-          Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
-          current2 = Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)
-          current2 *= Yabs2
-          current2s[l] = current2
+            line = first(line)
+            f = line.from; t = line.to
+            Y_tf = Y[t, f]; Y_ft = Y[f, t]
+            ## NOTE: current from Frank & Rebennack OPF primer: eq 5.11 where turns/tap ratios are accounted for in `Y`
+            Vm_f = VM[busIdx[f]]; Va_f = VA[busIdx[f]]
+            Vm_t = VM[busIdx[t]]; Va_t = VA[busIdx[t]]
+            Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
+            current2 = Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)
+            current2 *= Yabs2
+            current2s[l] = current2
         end
     end
     return (flowmag2=current2s, id=collect(1:nline_orig))
@@ -591,8 +596,7 @@ end
 
 function remove_line!(opfdata::OPFData, l::Int64, verb::Bool=false)
     lines = [x for x in opfdata.lines]
-    line_indices = get_line_indices(opfdata)
-    removed = l ∉ line_indices
+    removed = l ∉ eachindex(opfdata.lines)
     if !removed
         if verb; println("removing line $l"); end
         rl = splice!(lines, l)
@@ -643,9 +647,8 @@ end
 
 function get_contingencies(opfdata::OPFData, options::Dict=DefaultOptions())
     contingencies = Dict()
-    # nonislanding_lines = get_nonislanding_lines(opfdata, options)
-    line_indices = get_line_indices(opfdata)
-    for l in line_indices
+    nline = length(opfdata.lines)
+    for l in 1:nline
         contingencies[l] = (c_type=:line, asset=deepcopy(opfdata.lines[l]))
     end
     return contingencies
@@ -669,7 +672,7 @@ end
 
 function check_feasibility(check_point::Dict, opfdata::OPFData, options::Dict, feas_tol=DefaultFeasTol())
     """
-    cehck feasibility of `point` and return dictionary of violating buses and lines
+    check feasibility of `point` and return dictionary of violating buses and lines
     """
     ## process
     PG = check_point[:Pg]
@@ -722,8 +725,4 @@ function check_feasibility(check_point::Dict, opfdata::OPFData, options::Dict, f
     else
         return false, infeas_dict
     end
-end
-
-function get_line_indices(opfdata::OPFData)
-    return eachindex(opfdata.lines)
 end
