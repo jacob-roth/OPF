@@ -612,6 +612,7 @@ function remove_line!(opfdata::OPFData, l::Int64, verb::Bool=false)
     end
 end
 
+
 function reinstate_line!(opfdata::OPFData, l::Int64, rl::MPCCases.Line, verb::Bool=false)
     lines = [x for x in opfdata.lines]
     redundant = any([(rl == x) for x in lines])
@@ -630,6 +631,7 @@ function reinstate_line!(opfdata::OPFData, l::Int64, rl::MPCCases.Line, verb::Bo
     nothing
 end
 
+
 function set_initial_limits!(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
     ## set ratings at maximum ratings
     update_ratings_max!(opfdata, options)
@@ -645,7 +647,7 @@ function set_initial_limits!(opfdata::OPFData, options::Dict=DefaultOptions(), a
     nothing
 end
 
-function get_contingencies(opfdata::OPFData, options::Dict=DefaultOptions())
+function get_all_contingencies(opfdata::OPFData, options::Dict=DefaultOptions())
     contingencies = Dict()
     nline = length(opfdata.lines)
     for l in 1:nline
