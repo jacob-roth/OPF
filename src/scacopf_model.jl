@@ -1,8 +1,11 @@
-function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),                adjustments::Dict=DefaultAdjustments())
+function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),                adjustments::Dict=DefaultAdjustments(), current_rating_bool::Bool=true)
 
     ## setup
+    options[:current_rating] = current_rating_bool
     opfmodeldata = get_opfmodeldata(opfdata, options, adjustments)
-    nbus = length(opfmodeldata[:buses]); nline = length(opfmodeldata[:lines]); ngen = length(opfmodeldata[:generators])
+    nbus = length(opfmodeldata[:buses])
+    nline = length(opfmodeldata[:lines])
+    ngen = length(opfmodeldata[:generators])
     R     = opfdata.bus_ref
     G     = filter(x -> x ∉ R, findall(.!isempty.(opfmodeldata[:BusGenerators])))
     L     = findall(isempty.(opfmodeldata[:BusGenerators]))
@@ -13,10 +16,9 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),        
     m = M.m
 
     contingencies = get_contingencies(opfdata, options)
-    line_indices = get_line_indices(opfdata)
     ## add contingency security constraints
     if !isempty(contingencies)
-        for c_id in line_indices
+        for c_id in 1:nline
             #
             # contingency (line removal)
             #
@@ -88,12 +90,10 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),        
             #
             # branch/lines flow limits
             #
-            options[:current_rating] = true
-            for l in filter(x -> x != c_id, line_indices)
-                println(l)
+            for l in filter(x -> x != c_id, 1:nline)
                 if options[:current_rating]
                     ## current
-                    add_line_current_constraint!(m, line_indices, c_opfmodeldata, l, c_id)
+                    add_line_current_constraint!(m, c_opfmodeldata, l, c_id)
                 else
                     ## apparent power (to & from)
                     add_line_power_constraint!(m, c_opfmodeldata, l, c_id)
