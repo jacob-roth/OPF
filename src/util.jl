@@ -594,7 +594,7 @@ function get_nonislanding_lines(opfdata::OPFData, options::Dict)
     return nonislanding_lines
 end
 
-function remove_line!(opfdata::OPFData, l::Int64, verb::Bool=false)
+function remove_line!(opfdata::OPFData, l::Int, verb::Bool=false)
     lines = [x for x in opfdata.lines]
     removed = l ∉ eachindex(opfdata.lines)
     if !removed
@@ -612,8 +612,7 @@ function remove_line!(opfdata::OPFData, l::Int64, verb::Bool=false)
     end
 end
 
-
-function reinstate_line!(opfdata::OPFData, l::Int64, rl::MPCCases.Line, verb::Bool=false)
+function reinstate_line!(opfdata::OPFData, l::Int, rl::MPCCases.Line, verb::Bool=false)
     lines = [x for x in opfdata.lines]
     redundant = any([(rl == x) for x in lines])
     if !redundant
@@ -631,7 +630,6 @@ function reinstate_line!(opfdata::OPFData, l::Int64, rl::MPCCases.Line, verb::Bo
     nothing
 end
 
-
 function set_initial_limits!(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
     ## set ratings at maximum ratings
     update_ratings_max!(opfdata, options)
@@ -648,9 +646,10 @@ function set_initial_limits!(opfdata::OPFData, options::Dict=DefaultOptions(), a
 end
 
 function get_all_contingencies(opfdata::OPFData, options::Dict=DefaultOptions())
-    contingencies = Dict()
+    contingencies = Dict{Int, Any}()
     nline = length(opfdata.lines)
     for l in 1:nline
+        l = Int(l)
         contingencies[l] = (c_type=:line, asset=deepcopy(opfdata.lines[l]))
     end
     return contingencies
