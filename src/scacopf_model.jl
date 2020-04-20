@@ -1,4 +1,4 @@
-function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),                adjustments::Dict=DefaultAdjustments(), contingencies::Dict=Dict(), current_rating_bool::Bool=true)
+function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),         adjustments::Dict=DefaultAdjustments(), contingencies::Dict=Dict(), current_rating_bool::Bool=true)
 
     ## setup
     options[:current_rating] = current_rating_bool
@@ -6,9 +6,9 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),        
     nbus = length(opfmodeldata[:buses])
     nline = length(opfmodeldata[:lines])
     ngen = length(opfmodeldata[:generators])
-    R     = opfdata.bus_ref
-    G     = filter(x -> x ∉ R, findall(.!isempty.(opfmodeldata[:BusGenerators])))
-    L     = findall(isempty.(opfmodeldata[:BusGenerators]))
+    R = opfdata.bus_ref
+    G = filter(x -> x ∉ R, findall(.!isempty.(opfmodeldata[:BusGenerators])))
+    L = findall(isempty.(opfmodeldata[:BusGenerators]))
     not_R = deleteat!(collect(1:nbus), R)
 
     ## base model
@@ -40,10 +40,10 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),        
             JuMP.registerobject(m, Symbol("Va_$(c_id)"), Va_, "Va_$(c_id)")
 
             ## composite containers
-            Pg    = Array{Variable,1}(undef, ngen)
-            Qg    = Array{Variable,1}(undef, ngen)
-            Vm    = Array{Variable,1}(undef, nbus)
-            Va    = Array{Variable,1}(undef, nbus)
+            Pg = Array{Variable,1}(undef, ngen)
+            Qg = Array{Variable,1}(undef, ngen)
+            Vm = Array{Variable,1}(undef, nbus)
+            Va = Array{Variable,1}(undef, nbus)
             for gi in zip([R], first.(opfdata.BusGenerators[R]))
                 g = gi[1]
                 i = gi[2]
@@ -61,7 +61,7 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),        
             end
             for i in [G; R]
                 Vm[i] = m[:Vm][i]
-                end
+            end
             for i in L
                 Vm[i] = m[Symbol("Vm_$(c_id)")][i]
             end
@@ -89,7 +89,7 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),        
             #
             # branch/lines flow limits
             #
-            for l in filter(x -> x != c_id, 1:nline)
+            for l in filter(x -> x != c_id, keys(contingencies))
                 if options[:current_rating]
                     ## current
                     add_line_current_constraint!(m, c_opfmodeldata, l, c_id)

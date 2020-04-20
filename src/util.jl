@@ -555,7 +555,7 @@ function get_flowmag2s(VM::Array{Float64,1}, VA::Array{Float64,1}, Y::AbstractAr
             Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
             current2 = Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)
             current2 *= Yabs2
-            current2s[l] = current2
+            current2s[l] = abs.(current2)
         end
     end
     return (flowmag2=current2s, id=collect(1:nline_orig))
