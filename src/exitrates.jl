@@ -128,6 +128,17 @@ end
 
 function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
     solution = Dict()
+    NB = length(opfmodeldata[:buses])
+    solution[:Pg_full] = zeros(length(opfmodeldata[:buses]))
+    solution[:Qg_full] = zeros(length(opfmodeldata[:buses]))
+    Pg = getvalue(getindex(opfmodel,:Pg))
+    Qg = getvalue(getindex(opfmodel,:Qg))
+    for x in enumerate(opfmodeldata[:generators])
+        g,gid = x[2],x[1]
+        idx = g.bus
+        solution[:Pg_full][idx] = Pg[gid]
+        solution[:Qg_full][idx] = Qg[gid]
+    end
     solution[:Pg] = getvalue(getindex(opfmodel,:Pg))
     solution[:Qg] = getvalue(getindex(opfmodel,:Qg))
     solution[:Vm] = getvalue(getindex(opfmodel,:Vm))
@@ -158,6 +169,14 @@ function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
     return solution
 end
 
+function write_optimal_values(file::String, optimal_values::Dict)
+    optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
+    for k in keys(optimal_values)
+        open("$(file)_$(string(k)).csv", "w") do io
+            writedlm(io, optimal_values[k])
+        end
+    end
+end
 
 ## -----------------------------------------------------------------------------
 ## Autodiff calculations
@@ -426,14 +445,14 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     # Compute ||∇h||^2 and (x⋆ - x̄)'*∇h
     #
     norm_squared_grad_h =
-        @NLexpression(opfmodel, 
+        @NLexpression(opfmodel,
             ((a > 0 ? 1.0 : 0.0)*( Vmi-(Vmj*cos(Vai - Vaj)))^2) +
             ((b > 0 ? 1.0 : 0.0)*( Vmj-(Vmi*cos(Vai - Vaj)))^2) +
             ((c > 0 ? 1.0 : 0.0)*( Vmi* Vmj*sin(Vai - Vaj))^2) +
             ((d > 0 ? 1.0 : 0.0)*(-Vmi* Vmj*sin(Vai - Vaj))^2)
         )
     xstar_minus_xbar_times_grad_h =
-        @NLexpression(opfmodel, 
+        @NLexpression(opfmodel,
             ((Vmi - Vm[i])*( Vmi-(Vmj*cos(Vai - Vaj)))) +
             ((Vmj - Vm[j])*( Vmj-(Vmi*cos(Vai - Vaj)))) +
             ((Vai - Va[i])*( Vmi* Vmj*sin(Vai - Vaj))) +
@@ -511,7 +530,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
         #
         # By exploiting symmetry of T, we have
         # det(I - KDT) = (1 - KD[1,1]T[1,1])(1 - KD[2,2]T[2,2]) - K^2 T[2,1]^2 D[1,1]D[2,2]
-        # 
+        #
         detW = @NLexpression(opfmodel,
                     ((1 - (Kstar*D[1,1]*T[1,1]))*(1 - (Kstar*D[2,2]*T[2,2]))) -
                     (Kstar^2*D[1,1]*D[2,2]*T[2,1]^2)
@@ -607,7 +626,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     #
     # Set objective to minimize energy function
     #
-    @NLobjective(em, Min, 
+    @NLobjective(em, Min,
         -0.5*sum(Y[m,n]*Vm[m]*Vm[n]*cos(Va[m] - Va[n]) for m in 1:nbus for n in 1:nbus)
         - sum(xbar[:Pnet][m]*Va[m] + xbar[:Qnet][m]*log(Vm[m]) for m in 1:nbus))
 
@@ -666,7 +685,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     hess_h_xstar =        ∇2h([VMstar_r; VAstar_r]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
     hess_h_xstar = 0.5 * (hess_h_xstar + hess_h_xstar') # Make the Hessian symmetric
 
-    
+
     # calculate rate
     Kstar      = norm(grad_H_xstar) / norm(grad_h_xstar)
     tempM      = hess_H_xstar - (Kstar * hess_h_xstar)
@@ -811,7 +830,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     VMstar = getvalue(getindex(em,:Vm))
     VAstar = getvalue(getindex(em,:Va))
     Kstar  = getvalue(getindex(em,:K))
-    
+
     ## Construct solution in reduced space
     VMstar_r = copy(VMstar)
     VAstar_r = copy(VAstar)
@@ -823,7 +842,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     end
     splice!(VAstar_r, opfmodeldata[:bus_ref])
 
-    
+
     ##
     ##
     exit_point = Dict()
@@ -878,7 +897,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
         ((VMstar[j] - VMbar[j])*( VMstar[j]-(VMstar[i]*cos(VAstar[i] - VAstar[j])))) +
         ((VAstar[i] - VAbar[i])*( VMstar[i]* VMstar[j]*sin(VAstar[i] - VAstar[j]))) +
         ((VAstar[j] - VAbar[j])*(-VMstar[i]* VMstar[j]*sin(VAstar[i] - VAstar[j])))
-    norm_squared_grad_h_check = 
+    norm_squared_grad_h_check =
         ((a > 0 ? 1.0 : 0.0)*( VMstar[i]-(VMstar[j]*cos(VAstar[i] - VAstar[j])))^2) +
         ((b > 0 ? 1.0 : 0.0)*( VMstar[j]-(VMstar[i]*cos(VAstar[i] - VAstar[j])))^2) +
         ((c > 0 ? 1.0 : 0.0)*( VMstar[i]* VMstar[j]*sin(VAstar[i] - VAstar[j]))^2) +
@@ -897,7 +916,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     X                        = -inv(D) + (Kstar*L'*inv_hess_H_times_L)
     L_times_xstar_minus_xbar = L'*xstar_minus_xbar
     kappa                    = det(-D) * det(X) * (## we expect this term to be close to zero O(10^-6 - 10^-2)
-                                xstar_minus_xbar_times_grad_h - 
+                                xstar_minus_xbar_times_grad_h -
                                     (L_times_xstar_minus_xbar' * (X \ L_times_xstar_minus_xbar))
                                )
     if kappa < 0 || isnan(kappa)
@@ -914,7 +933,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
         (options[:print_level] >= 1) && println("warning: unable to compute KKT exit rate for line ", l, " = (", i, ",", j, "). prefactor = ", prefactor, " (negative)")
         return nothing
     end
-    
+
 
     ##
     ##
@@ -933,7 +952,7 @@ end
 ## returns a matrix P of size (nreduced x nbus) such that
 ## for any A of size (nreduced x nreduced)
 ## P'AP is an expanded matrix of size (nbus x nbus)
-## with zeros for entries that are not in nreduced 
+## with zeros for entries that are not in nreduced
 function compute_projection_matrix(nbus, nonLoadBuses, bus_ref)
     Proj = zeros(2nbus - length(nonLoadBuses) - 1, 2nbus)
     b = 1

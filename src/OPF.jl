@@ -61,7 +61,7 @@ include("sensitivities.jl")
 export get_Gamma, get_Gamma_fd, get_Gamma_ew
 
 include("exitrates.jl")
-export acopf_solve_exitrates, compute_exitrate_kkt
+export acopf_solve_exitrates, compute_exitrate_kkt, write_optimal_values
 
 # include("acopf_n1_limits.jl")
 # export set_n1_limits!

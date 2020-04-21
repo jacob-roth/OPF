@@ -1,9 +1,9 @@
-# const path = pwd() * "/cases/"
-# const tol = 1e-9
-# const plotting = false
-#
-# import Pkg; Pkg.activate(".."); Pkg.instantiate()
-# include("../src/OPF.jl")
+const path = pwd() * "/cases/"
+const tol = 1e-9
+const plotting = false
+
+import Pkg; Pkg.activate(".."); Pkg.instantiate()
+include("../src/OPF.jl")
 
 ##
 ## get exitrate point
