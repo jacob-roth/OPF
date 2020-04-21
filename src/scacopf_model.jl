@@ -1,4 +1,4 @@
-function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),         adjustments::Dict=DefaultAdjustments(), contingencies::Dict=Dict(), current_rating_bool::Bool=true)
+function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), contingencies::Dict=Dict(), current_rating_bool::Bool=true)
 
     ## setup
     options[:current_rating] = current_rating_bool

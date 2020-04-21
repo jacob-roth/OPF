@@ -1,4 +1,4 @@
-function set_n1_limits!(opfdata::OPFData, options::Dict, adjustments::Dict, max_iter::Int=10, pct::Union{Int, Float64}=0.5, verbose::Bool=false)
+function set_n1_limits!(opfdata::OPFData, options::Dict, adjustments::Dict, max_iter::Int=10, pct::Union{Int, Float64}=0.1, verbose::Bool=false, slack_index::Int=1)
     ## shortcuts
     lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
     busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
@@ -32,9 +32,9 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, adjustments::Dict, max_
             reinstate_line!(opfdata, c_id, removed_line)
         end
 
-        ## get computed point
         point, M = get_scacopf_point(opfdata, options, adjustments, contingencies)
         for c_id in keys(contingencies)
+            set_slack_value!(M, c_id, slack_index)
             infeasible_contingency_points = get_infeasible_contingency_points(opfdata, M, c_id)
             if !isempty(infeasible_contingency_points)
                 println(infeasible_contingency_points)
@@ -79,7 +79,7 @@ function get_scacopf_point(opfdata::OPFData, options::Dict, adjustments::Dict, c
     return calc_point, M
 end
 
-function get_contingency_point(M, c_id)
+function get_contingency_point(M::OPFModel, c_id::Int)
     x_calc = MathProgBase.getsolution(M.m.internalModel)
     calc_point = Dict()
     calc_point[:Pg] = deepcopy(x_calc[[x.col for x in getindex(M.m, Symbol("Pg_$(c_id)_container"))]])
@@ -98,7 +98,7 @@ function update_rating_limits(opfdata::OPFData, ratings::Array{Float64, 1}, pct:
     return updated_rating_limits
 end
 
-function get_infeasible_contingency_points(opfdata, M, c_id)
+function get_infeasible_contingency_points(opfdata::OPFData, M::OPFModel, c_id::Int)
     if !all(getvalue(M.m[Symbol("Vm_$(c_id)_container")]) .<= opfdata.buses.Vmax)
         return findall(.!(getvalue(M.m[Symbol("Vm_$(c_id)_container")]) .<= opfdata.buses.Vmax))
     elseif !all(getvalue(M.m[Symbol("Vm_$(c_id)_container")]) .>= opfdata.buses.Vmin)
@@ -114,4 +114,10 @@ function get_infeasible_contingency_points(opfdata, M, c_id)
     else
         return Array{Int,1}()
     end
+end
+
+function set_slack_value!(M::OPFModel, c_id::Int, slack_index::Int)
+    setvalue(M.m[Symbol("Vm_$(c_id)_container")][slack_index], getvalue(M.m[:Vm][slack_index]))
+    setvalue(M.m[Symbol("Qg_$(c_id)_container")][slack_index], getvalue(M.m[:Qg][slack_index]))
+    setvalue(M.m[Symbol("Pg_$(c_id)_container")][slack_index], getvalue(M.m[:Pg][slack_index]))
 end
