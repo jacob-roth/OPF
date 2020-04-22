@@ -20,8 +20,10 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   if options[:feasibility] == true
     @NLobjective(opfmodel, Min, 0)
   else
-    @NLobjective(opfmodel, Min, sum(opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2] * (opfmodeldata[:baseMVA] * Pg[i]) ^ 2 + opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1] * (opfmodeldata[:baseMVA] * Pg[i]) +
+    obj = @NLexpression(opfmodel, sum(opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2] * (opfmodeldata[:baseMVA] * Pg[i]) ^ 2 + opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1] * (opfmodeldata[:baseMVA] * Pg[i]) +
     opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n] for i=1:ngen))
+    JuMP.registerobject(opfmodel, :obj, obj, "obj")
+    @NLobjective(opfmodel, Min, obj)
   end
 
   #
