@@ -1,7 +1,6 @@
-function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), contingencies::Dict=Dict(), current_rating_bool::Bool=true)
+function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), contingencies::Dict=Dict())
 
     ## setup
-    options[:current_rating] = current_rating_bool
     opfmodeldata = get_opfmodeldata(opfdata, options, adjustments)
     nbus = length(opfmodeldata[:buses])
     nline = length(opfmodeldata[:lines])
@@ -29,51 +28,63 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
             #
             # secondary variables
             #
-            Pg_ = @variable(m, [i=R], basename="Pg_$c_id")
-            Qg_ = @variable(m, [i=[G;R]], basename="Qg_$c_id")
-            Vm_ = @variable(m, [i=L], basename="Vm_$c_id")
-            Va_ = @variable(m, [i=not_R], basename="Va_$c_id")
+            Pg_ = @variable(m, [i=1:ngen], basename="Pg_$c_id")
+            Qg_ = @variable(m, [i=1:ngen], basename="Qg_$c_id")
+            for i in 1:ngen
+                @constraint(m, opfmodeldata[:generators].Pmin[i] <= Pg_[i] <= opfmodeldata[:generators].Pmax[i])
+            end
+            for i in 1:ngen
+                @constraint(m, opfmodeldata[:generators].Qmin[i] <= Qg_[i] <= opfmodeldata[:generators].Qmax[i])
+            end
+            Vm_ = @variable(m, [i=1:nbus], basename="Vm_$c_id")
+            for i in 1:nbus
+                @constraint(m, 0.95opfmodeldata[:buses].Vmin[i] <= Vm_[i] <= 1.05opfmodeldata[:buses].Vmax[i])
+            end
+            Va_ = @variable(m, [i=1:nbus], basename="Va_$c_id")
+            for i in 1:nbus
+                @constraint(m, -pi <= Va_[i] <= pi)
+            end
             JuMP.registerobject(m, Symbol("Pg_$(c_id)"), Pg_, "Pg_$(c_id)")
             JuMP.registerobject(m, Symbol("Qg_$(c_id)"), Qg_, "Qg_$(c_id)")
             JuMP.registerobject(m, Symbol("Vm_$(c_id)"), Vm_, "Vm_$(c_id)")
             JuMP.registerobject(m, Symbol("Va_$(c_id)"), Va_, "Va_$(c_id)")
 
-            ## composite containers
-            Pg = Array{Variable,1}(undef, ngen)
-            Qg = Array{Variable,1}(undef, ngen)
-            Vm = Array{Variable,1}(undef, nbus)
-            Va = Array{Variable,1}(undef, nbus)
-            for gi in zip([R], first.(opfdata.BusGenerators[R]))
-                g = gi[1]
-                i = gi[2]
-                Pg[i] = m[Symbol("Pg_$(c_id)")][g]
-            end
-            for gi in zip(G, first.(opfdata.BusGenerators[G]))
-                g = gi[1]
-                i = gi[2]
-                Pg[i] = m[Symbol("Pg")][i] # since in acopf Pg is indexed by generator not bus
-            end
-            for gi in zip([G; R], [first.(opfdata.BusGenerators[G]); first.(opfdata.BusGenerators[R])])
-                g = gi[1]
-                i = gi[2]
-                Qg[i] = m[Symbol("Qg_$(c_id)")][g]
-            end
-            for i in [G; R]
-                Vm[i] = m[:Vm][i]
-            end
-            for i in L
-                Vm[i] = m[Symbol("Vm_$(c_id)")][i]
-            end
-            for i in [R]
-                Va[i] = m[:Va][i]
-            end
-            for i in [L; G]
-                Va[i] = m[Symbol("Va_$(c_id)")][i]
-            end
-            JuMP.registerobject(m, Symbol("Pg_$(c_id)_container"), Pg, "Pg_$(c_id)_container")
-            JuMP.registerobject(m, Symbol("Qg_$(c_id)_container"), Qg, "Qg_$(c_id)_container")
-            JuMP.registerobject(m, Symbol("Vm_$(c_id)_container"), Vm, "Vm_$(c_id)_container")
-            JuMP.registerobject(m, Symbol("Va_$(c_id)_container"), Va, "Va_$(c_id)_container")
+            # ## composite containers
+            # Pg = Array{Variable,1}(undef, ngen)
+            # Qg = Array{Variable,1}(undef, ngen)
+            # Vm = Array{Variable,1}(undef, nbus)
+            # Va = Array{Variable,1}(undef, nbus)
+            # for gi in zip([R], first.(opfdata.BusGenerators[R]))
+            #     g = gi[1]
+            #     i = gi[2]
+            #     Pg[i] = m[Symbol("Pg_$(c_id)")][g]
+            # end
+            # for gi in zip(G, first.(opfdata.BusGenerators[G]))
+            #     g = gi[1]
+            #     i = gi[2]
+            #     Pg[i] = m[Symbol("Pg")][i] # since in acopf Pg is indexed by generator not bus
+            # end
+            # for gi in zip([G; R], [first.(opfdata.BusGenerators[G]); first.(opfdata.BusGenerators[R])])
+            #     g = gi[1]
+            #     i = gi[2]
+            #     Qg[i] = m[Symbol("Qg_$(c_id)")][g]
+            # end
+            # for i in [G; R]
+            #     Vm[i] = m[:Vm][i]
+            # end
+            # for i in L
+            #     Vm[i] = m[Symbol("Vm_$(c_id)")][i]
+            # end
+            # for i in [R]
+            #     Va[i] = m[:Va][i]
+            # end
+            # for i in [L; G]
+            #     Va[i] = m[Symbol("Va_$(c_id)")][i]
+            # end
+            # JuMP.registerobject(m, Symbol("Pg_$(c_id)_container"), Pg, "Pg_$(c_id)_container")
+            # JuMP.registerobject(m, Symbol("Qg_$(c_id)_container"), Qg, "Qg_$(c_id)_container")
+            # JuMP.registerobject(m, Symbol("Vm_$(c_id)_container"), Vm, "Vm_$(c_id)_container")
+            # JuMP.registerobject(m, Symbol("Va_$(c_id)_container"), Va, "Va_$(c_id)_container")
 
             #
             # power flow balance
@@ -111,14 +122,13 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
 end
 
 function get_operating_points(opfmodel::JuMP.Model, contingencies::Dict)
-  ops = Dict[]
+  ops = Dict()
   for c_id in keys(contingencies)
-    D = Dict()
     D[:Pg] = deepcopy(getvalue(opfmodel[Symbol("Pg_$(c_id)_container")]))
     D[:Qg] = deepcopy(getvalue(opfmodel[Symbol("Qg_$(c_id)_container")]))
     D[:Vm] = deepcopy(getvalue(opfmodel[Symbol("Vm_$(c_id)_container")]))
     D[:Va] = deepcopy(getvalue(opfmodel[Symbol("Va_$(c_id)_container")]))
-    push!(ops, D)
+    ops[c_id] = deepcopy(D)
   end
   return ops
 end
