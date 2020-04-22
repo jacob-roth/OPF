@@ -17,14 +17,14 @@ export OPFModel
 include("default.jl")
 export DefaultOptions, DefaultAdjustments
 
-include("constraints.jl")
+include("constraints_coupled.jl")
 export add_p_constraint!, add_q_constraint!
 export add_line_current_constraint!, add_line_power_constraint!
 
 include("acpf_model.jl")
 export acpf_model
 
-include("acopf_model.jl")
+include("acopf_model_coupled.jl")
 export acopf_model
 
 include("s_acopf_model.jl")
@@ -33,23 +33,21 @@ export s_acopf_model
 include("acopf_zip_model.jl")
 export acopf_zip_model
 
-include("scacopf_model.jl")
+include("scacopf_model_coupled.jl")
 export scacopf_model, get_operating_points
 
-include("scacopf_n1_limits.jl")
-export set_n1_limits!, get_acopf_point, get_scacopf_point, get_contingency_point, update_limits!
+include("scacopf_n1_limits_coupled.jl")
+export set_n1_limits
 
-include("util.jl")
+include("util_coupled.jl")
 export acopf_solve, acopf_initialPt_IPOPT
 export acopf_outputAll, get_values
-export scacopf_solve
 export RGL_id, RGL_idx, model_idx
 export PQnet
 export get_opfmodeldata
 export get_all_contingencies
 export remove_line!, reinstate_line!
 export get_flowmag2s, get_ratings
-export get_islanding_buses, get_islanding_buses, get_nonislanding_contingencies
 
 include("pfe.jl")
 export P_i, Q_i
