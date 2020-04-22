@@ -39,8 +39,8 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
                 ## bound
                 @constraint(m, opfmodeldata[:generators].Pmin[i] <= Pg_[i] <= opfmodeldata[:generators].Pmax[i])
                 ## ramp
-                @constraint(m, 0.75 * Pg[i] - Pg_[i] <= 0.0) #@constraint(m, 0.5 * Pg[i] - Pg_[i] <= 0.0)
-                @constraint(m, Pg_[i] - 1.25 * Pg[i] <= 0.0) #@constraint(m, Pg_[i] - 2.0 * Pg[i] <= 0.0)
+                @constraint(m, options[:rampdn] * Pg[i] - Pg_[i] <= 0.0) #@constraint(m, 0.5 * Pg[i] - Pg_[i] <= 0.0)
+                @constraint(m, Pg_[i] - options[:rampup] * Pg[i] <= 0.0) #@constraint(m, Pg_[i] - 2.0 * Pg[i] <= 0.0)
             end
             for i in 1:ngen
                 ## bound
@@ -48,11 +48,7 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
             end
             Vm_ = @variable(m, [i=1:nbus], basename="Vm_$c_id")
             for i in 1:nbus
-                if i in opfdata.generators.bus
-                    @constraint(m, Vm_[i] == Vm[i])
-                else
-                    @constraint(m, opfmodeldata[:buses].Vmin[i] <= Vm_[i] <= opfmodeldata[:buses].Vmax[i])
-                end
+                @constraint(m, (1 - options[:ctg_Vm_adj])*opfmodeldata[:buses].Vmin[i] <= Vm_[i] <= (1 + options[:ctg_Vm_adj])*opfmodeldata[:buses].Vmax[i])
             end
             Va_ = @variable(m, [i=1:nbus], basename="Va_$c_id")
             for i in 1:nbus
@@ -144,8 +140,10 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
     # full objective function
     #
     objective_full = m[:obj]
-    for c_id in keys(contingencies)
-        objective_full = @NLexpression(m, objective_full + obj_cs[c_id])
+    if options[:sc_total_obj] == true
+        for c_id in keys(contingencies)
+            objective_full = @NLexpression(m, objective_full + obj_cs[c_id])
+        end
     end
     @NLobjective(m, Min, objective_full)
 

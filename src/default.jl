@@ -9,6 +9,10 @@ function DefaultOptions()
   D[:remove_tap]     = false   ## remove tap adjustments?
   D[:print_level]    = 0       ## 0: no printing
   D[:feasibility]    = false   ## feasibility problem only (no OPF objective)?
+  D[:sc_total_obj]   = false   ## minimize cost under contingency cases in security-constrained acopf
+  D[:rampup]         = 2.0     ## Pg coupling up
+  D[:rampdn]         = 0.5     ## Pg coupling down
+  D[:ctg_Vm_adj]     = 0.05    ## allowable voltage increase/decrease from Vmax/Vmin in contingency case
   zip0 = Dict(:alpha => 1.0,   ## α + β + γ = 1
               :beta  => 0.0,
               :gamma => 0.0,

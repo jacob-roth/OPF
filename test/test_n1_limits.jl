@@ -21,12 +21,13 @@ options[:current_rating] = true
 options[:lossless]       = true
 options[:remove_Bshunt]  = true
 options[:remove_tap]     = true
-options[:print_level]    = 1
+options[:print_level]    = 5
 
 adjustments = DefaultAdjustments()
 
 case_path     = "/Users/jakeroth/Desktop/opensource/OPF/test/cases/";
-case_name     = "case30";
+# case_name     = "case30";
+case_name     = "case118";
 casedata      = load_case(case_name, case_path);
 opfdata       = casedata.opf;
 contingencies = get_all_contingencies(opfdata, options)
