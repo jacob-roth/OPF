@@ -35,10 +35,14 @@ function add_p_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
     Vm = Vm0
     Va = Va0
   else
-    Pg = opfmodel[Symbol("Pg_$(c)_container")]
-    Qg = opfmodel[Symbol("Qg_$(c)_container")]
-    Vm = opfmodel[Symbol("Vm_$(c)_container")]
-    Va = opfmodel[Symbol("Va_$(c)_container")]
+    Pg = opfmodel[Symbol("Pg_$(c)")]
+    Qg = opfmodel[Symbol("Qg_$(c)")]
+    Vm = opfmodel[Symbol("Vm_$(c)")]
+    Va = opfmodel[Symbol("Va_$(c)")]
+    # # Pg = opfmodel[Symbol("Pg_$(c)_container")]
+    # # Qg = opfmodel[Symbol("Qg_$(c)_container")]
+    # # Vm = opfmodel[Symbol("Vm_$(c)_container")]
+    # # Va = opfmodel[Symbol("Va_$(c)_container")]
     # Pg    = Array{Variable,1}(undef, ngen)
     # Qg    = Array{Variable,1}(undef, ngen)
     # Vm    = Array{Variable,1}(undef, nbus)
@@ -127,10 +131,14 @@ function add_q_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
     Vm = Vm0
     Va = Va0
   else
-    Pg = opfmodel[Symbol("Pg_$(c)_container")]
-    Qg = opfmodel[Symbol("Qg_$(c)_container")]
-    Vm = opfmodel[Symbol("Vm_$(c)_container")]
-    Va = opfmodel[Symbol("Va_$(c)_container")]
+    Pg = opfmodel[Symbol("Pg_$(c)")]
+    Qg = opfmodel[Symbol("Qg_$(c)")]
+    Vm = opfmodel[Symbol("Vm_$(c)")]
+    Va = opfmodel[Symbol("Va_$(c)")]
+    # # Pg = opfmodel[Symbol("Pg_$(c)_container")]
+    # # Qg = opfmodel[Symbol("Qg_$(c)_container")]
+    # # Vm = opfmodel[Symbol("Vm_$(c)_container")]
+    # # Va = opfmodel[Symbol("Va_$(c)_container")]
     # Pg    = Array{Variable,1}(undef, ngen)
     # Qg    = Array{Variable,1}(undef, ngen)
     # Vm    = Array{Variable,1}(undef, nbus)
@@ -210,10 +218,14 @@ function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, 
         Vm = Vm0
         Va = Va0
     else
-        Pg = opfmodel[Symbol("Pg_$(c)_container")]
-        Qg = opfmodel[Symbol("Qg_$(c)_container")]
-        Vm = opfmodel[Symbol("Vm_$(c)_container")]
-        Va = opfmodel[Symbol("Va_$(c)_container")]
+        Pg = opfmodel[Symbol("Pg_$(c)")]
+        Qg = opfmodel[Symbol("Qg_$(c)")]
+        Vm = opfmodel[Symbol("Vm_$(c)")]
+        Va = opfmodel[Symbol("Va_$(c)")]
+        # # Pg = opfmodel[Symbol("Pg_$(c)_container")]
+        # # Qg = opfmodel[Symbol("Qg_$(c)_container")]
+        # # Vm = opfmodel[Symbol("Vm_$(c)_container")]
+        # # Va = opfmodel[Symbol("Va_$(c)_container")]
     end
 
     line = lines[lines.id .== l][1]

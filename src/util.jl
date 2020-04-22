@@ -72,22 +72,25 @@ function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, co
 
     dp_0, m_0 = get_dispatch_point(opfdata, options)
     for c_id in keys(contingencies)
-        for gi in zip(R, first.(opfdata.BusGenerators[R]))
-            g = gi[1]
-            i = gi[2]
-            setvalue(getindex(opfmodel, Symbol("Pg_$(c_id)"))[g], dp_0[:Pg][i])
+        for i in 1:ngen
+            setvalue(getindex(opfmodel, Symbol("Pg_$(c_id)"))[i], dp_0[:Pg][i])
+            setvalue(getindex(opfmodel, Symbol("Qg_$(c_id)"))[i], dp_0[:Qg][i])
         end
-        for gi in zip([G; R], [first.(opfdata.BusGenerators[G]); first.(opfdata.BusGenerators[R])])
-            g = gi[1]
-            i = gi[2]
-            setvalue(getindex(opfmodel, Symbol("Qg_$(c_id)"))[g], dp_0[:Qg][i])
-        end
-        for i in L
+        for i in 1:nbus
             setvalue(getindex(opfmodel, Symbol("Vm_$(c_id)"))[i], dp_0[:Vm][i])
-        end
-        for i in not_R
             setvalue(getindex(opfmodel, Symbol("Va_$(c_id)"))[i], dp_0[:Va][i])
         end
+        # for gi in zip([G; R], [first.(opfdata.BusGenerators[G]); first.(opfdata.BusGenerators[R])])
+        #     g = gi[1]
+        #     i = gi[2]
+        #     setvalue(getindex(opfmodel, Symbol("Qg_$(c_id)"))[g], dp_0[:Qg][i])
+        # end
+        # for i in L
+        #     setvalue(getindex(opfmodel, Symbol("Vm_$(c_id)"))[i], dp_0[:Vm][i])
+        # end
+        # for i in not_R
+        #     setvalue(getindex(opfmodel, Symbol("Va_$(c_id)"))[i], dp_0[:Va][i])
+        # end
     end
 
     status = :IpoptInit
@@ -467,23 +470,23 @@ function update_loadings!(opfdata::OPFData, options::Dict,
     nothing
 end
 
-function update_ratings_max!(opfdata::OPFData, options::Dict)
-  Y     = computeAdmittanceMatrix(opfdata, options)
-  f     = opfdata.lines.from
-  t     = opfdata.lines.to
-  Y_tf  = [Y[tt,ff] for (tt,ff) in zip(t,f)]
-  Y_ft  = [Y[ff,tt] for (tt,ff) in zip(t,f)]
-  V_t   = opfdata.buses.Vmax[t]
-  V_f   = opfdata.buses.Vmax[f]
-  Yabs2 = max.(abs2.(Y_tf), abs2.(Y_ft))
-
-  if options[:current_rating] == true
-    max_ratings = (V_t .^2 .+ V_f .^2 .+ 2 .* (V_t .* V_f)) .* Yabs2
-  else
-    throw("Max power ratings not yet implemented.")
-  end
-  opfdata.lines.rateA .= max_ratings
-end
+# function update_ratings_max!(opfdata::OPFData, options::Dict)
+#   Y     = computeAdmittanceMatrix(opfdata, options)
+#   f     = opfdata.lines.from
+#   t     = opfdata.lines.to
+#   Y_tf  = [Y[tt,ff] for (tt,ff) in zip(t,f)]
+#   Y_ft  = [Y[ff,tt] for (tt,ff) in zip(t,f)]
+#   V_t   = opfdata.buses.Vmax[t]
+#   V_f   = opfdata.buses.Vmax[f]
+#   Yabs2 = max.(abs2.(Y_tf), abs2.(Y_ft))
+#
+#   if options[:current_rating] == true
+#     max_ratings = (V_t .^2 .+ V_f .^2 .+ 2 .* (V_t .* V_f)) .* Yabs2
+#   else
+#     throw("Max power ratings not yet implemented.")
+#   end
+#   opfdata.lines.rateA .= max_ratings
+# end
 
 function get_loadings(opfdata::OPFData, options::Dict,
                       loading::Float64=DefaultLoading(), adj_pf::Float64=DefaultAdjPF())
@@ -599,6 +602,30 @@ function get_nonislanding_lines(opfdata::OPFData, options::Dict)
     return nonislanding_lines
 end
 
+function get_islanding_buses(opfdata::OPFData, options::Dict, c::Int64)
+  """ get islanded buses under contingency `c` """
+    islanding_lines = Int64[]
+    opfd = deepcopy(opfdata)
+    remove_line!(opfd, c)
+    Y = sparse(computeAdmittanceMatrix(opfd, options))
+    m = strong_components_map(Y)
+    islanded_buses = findall(m .!= 1)
+    return islanded_buses
+end
+function get_islanding_buses(opfmodeldata::Dict, options::Dict)
+  """ get islanded buses under contingency `c` (`c` assumed to be included in `opfmodeldata`)"""
+    islanding_lines = Int64[]
+    lines   = opfmodeldata[:lines]
+    buses   = opfmodeldata[:buses]
+    baseMVA = opfmodeldata[:baseMVA]
+    busDict = opfmodeldata[:BusIdx]
+    Y = sparse(computeAdmittanceMatrix(lines, buses, baseMVA, busDict,
+              lossless=options[:lossless], remove_Bshunt=options[:remove_Bshunt], remove_tap=options[:remove_tap], sparse=true, verb=false))
+    m = strong_components_map(Y)
+    islanded_buses = findall(m .!= 1)
+    return islanded_buses
+end
+
 function remove_line!(opfdata::OPFData, l::Int, verb::Bool=false)
     lines = [x for x in opfdata.lines]
     removed = l ∉ eachindex(opfdata.lines)
@@ -654,6 +681,15 @@ function get_all_contingencies(opfdata::OPFData, options::Dict=DefaultOptions())
     contingencies = Dict{Int, Any}()
     nline = length(opfdata.lines)
     for l in 1:nline
+        l = Int(l)
+        contingencies[l] = (c_type=:line, asset=deepcopy(opfdata.lines[l]))
+    end
+    return contingencies
+end
+
+function get_nonislanding_contingencies(opfdata::OPFData, options::Dict=DefaultOptions())
+    contingencies = Dict{Int, Any}()
+    for l in get_nonislanding_lines(opfdata, options)
         l = Int(l)
         contingencies[l] = (c_type=:line, asset=deepcopy(opfdata.lines[l]))
     end

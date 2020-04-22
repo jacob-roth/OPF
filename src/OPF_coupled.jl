@@ -17,14 +17,14 @@ export OPFModel
 include("default.jl")
 export DefaultOptions, DefaultAdjustments
 
-include("constraints_decoupled.jl")
+include("constraints_coupled.jl")
 export add_p_constraint!, add_q_constraint!
 export add_line_current_constraint!, add_line_power_constraint!
 
 include("acpf_model.jl")
 export acpf_model
 
-include("acopf_model.jl")
+include("acopf_model_coupled.jl")
 export acopf_model
 
 include("s_acopf_model.jl")
@@ -33,16 +33,13 @@ export s_acopf_model
 include("acopf_zip_model.jl")
 export acopf_zip_model
 
-include("scacopf_model_decoupled.jl")
+include("scacopf_model_coupled.jl")
 export scacopf_model, get_operating_points
 
-include("scacopf_n1_limits_decoupled.jl")
+include("scacopf_n1_limits_coupled.jl")
 export set_n1_limits
 
-include("n1_limits.jl")
-export get_n1_limits
-
-include("util_decoupled.jl")
+include("util_coupled.jl")
 export acopf_solve, acopf_initialPt_IPOPT
 export acopf_outputAll, get_values
 export RGL_id, RGL_idx, model_idx

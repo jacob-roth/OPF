@@ -37,20 +37,19 @@ include("scacopf_model.jl")
 export scacopf_model, get_operating_points
 
 include("scacopf_n1_limits.jl")
-export set_n1_limits
-
-include("n1_limits.jl")
-export get_n1_limits
+export set_n1_limits!, get_acopf_point, get_scacopf_point, get_contingency_point, update_limits!
 
 include("util.jl")
 export acopf_solve, acopf_initialPt_IPOPT
 export acopf_outputAll, get_values
+export scacopf_solve
 export RGL_id, RGL_idx, model_idx
 export PQnet
 export get_opfmodeldata
 export get_all_contingencies
 export remove_line!, reinstate_line!
 export get_flowmag2s, get_ratings
+export get_islanding_buses, get_islanding_buses, get_nonislanding_contingencies
 
 include("pfe.jl")
 export P_i, Q_i

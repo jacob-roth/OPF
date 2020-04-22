@@ -1,59 +1,54 @@
-function set_n1_limits!(opfdata::OPFData, options::Dict, adjustments::Dict, max_iter::Int=10, pct::Union{Int, Float64}=0.1, verbose::Bool=false, slack_index::Int=1)
+function set_n1_limits!(opfdata::OPFData, options::Dict, adjustments::Dict,
+                        max_iter::Int=10, viol_scale::Float64=1.005, nonviol_scale::Float64=1.0)
+
     ## shortcuts
     lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
     busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
     nbus = length(buses); nline = length(lines); ngen = length(generators)
 
-    # set ratings for no line outages
-    opfdata.lines.rateA .= 0
-    point_0, M_0 = get_acopf_point(opfdata, options, adjustments)
-    @assert(M_0.status == :Optimal)
+    ## compute initial ratings at 0-contingency
+    opfdata.lines.rateA .= 0.0
+    point_0, M = get_scacopf_point(opfdata, options, adjustments, contingencies)
+    @assert(M.status == :Optimal)
     flowmag2s_0 = get_flowmag2s(point_0, opfdata, options)
-    ratings_0 = get_ratings(flowmag2s_0.flowmag2, opfdata.baseMVA)
-    opfdata.lines.rateA .= ratings_0
+    ratings_0   = get_ratings(flowmag2s_0.flowmag2, opfdata.baseMVA)
+    ratings     = deepcopy(ratings_0)
+    opfdata.lines.rateA .= max.(ratings, 1.0)
 
-    solved = false; iter = 0
-    contingencies = get_all_contingencies(opfdata, options)
-    point, M = get_scacopf_point(opfdata, options, adjustments, contingencies)
-    while solved == false && iter <= max_iter
-        flowmag2s_0 = get_flowmag2s(point, opfdata, options)
-        ratings_0 = get_ratings(flowmag2s_0.flowmag2, opfdata.baseMVA)
-        opfdata.lines.rateA .= update_rating_limits(opfdata, ratings_0, pct)
-        if verbose == true
-            println(opfdata.lines.rateA)
-        end
-
-        for c_id in keys(contingencies)
-            removed_line = remove_line!(opfdata, c_id)
-            point_l = get_contingency_point(M, c_id)
-            flowmag2s_l = get_flowmag2s(point_l, opfdata, options).flowmag2
-            ratings_l = get_ratings(flowmag2s_l, opfdata.baseMVA)
-            opfdata.lines.rateA .= update_rating_limits(opfdata, ratings_l, pct)
-            reinstate_line!(opfdata, c_id, removed_line)
-        end
-
-        point, M = get_scacopf_point(opfdata, options, adjustments, contingencies)
-        for c_id in keys(contingencies)
-            set_slack_value!(M, c_id, slack_index)
-            infeasible_contingency_points = get_infeasible_contingency_points(opfdata, M, c_id)
-            if !isempty(infeasible_contingency_points)
-                println(infeasible_contingency_points)
-            end
-        end
-
-        if M.status == :Optimal
-            solved = true
-        end
-
-        iter += 1
+    ## compute initial ratings at c_id-contingency
+    for c_id in keys(contingencies)
+        point_c     = get_contingency_point(M, c_id)
+        flowmag2s_c = get_flowmag2s(point_c, opfdata, options)
+        ratings_c   = get_ratings(flowmag2s_c.flowmag2, opfdata.baseMVA)
+        update_limits!(opfdata, ratings_c, viol_scale, nonviol_scale)
     end
 
-    ## display
-    # for l in eachindex(lines)
-    #     println("Line   From Bus    To Bus    Rating (Orig)    Rating (New)")
-    #     @printf("%3d      %3d        %3d          %5.3f            %5.3f\n", l, lines.from[l], lines.to[l], ratings_0[l], opfdata.lines.rateA[l])
-    # end
-    # return opfdata
+    ## try solving scacopf problem and also update ratings
+    solved = false; iter = 0
+    while solved != true && iter <= max_iter
+
+        ## compute ratings at 0-contingency
+        point_0, M  = get_scacopf_point(opfdata, options, adjustments, contingencies)
+        if M.status == :Optimal; break; end
+        flowmag2s_0 = get_flowmag2s(point_0, opfdata, options)
+        ratings_0   = get_ratings(flowmag2s_0.flowmag2, opfdata.baseMVA)
+        ratings     = deepcopy(ratings_0)
+        update_limits!(opfdata, ratings, viol_scale, nonviol_scale)
+
+        ## compute ratings at c_id-contingency
+        for c_id in keys(contingencies)
+            opfd = deepcopy(opfdata)
+            removed_line = remove_line!(opfd, c_id)
+            point_c      = get_contingency_point(M, c_id)
+            flowmag2s_c  = get_flowmag2s(point_c, opfd, options).flowmag2; splice!(flowmag2s_c, c_id:c_id-1, 0.0)
+            ratings_c    = get_ratings(flowmag2s_c, opfd.baseMVA)
+            update_limits!(opfdata, ratings_c, viol_scale, nonviol_scale)
+            reinstate_line!(opfd, c_id, removed_line)
+        end
+
+        ## update counter
+        iter += 1
+    end
 end
 
 function get_acopf_point(opfdata::OPFData, options::Dict, adjustments::Dict, warm_point=false)
@@ -82,42 +77,18 @@ end
 function get_contingency_point(M::OPFModel, c_id::Int)
     x_calc = MathProgBase.getsolution(M.m.internalModel)
     calc_point = Dict()
-    calc_point[:Pg] = deepcopy(x_calc[[x.col for x in getindex(M.m, Symbol("Pg_$(c_id)_container"))]])
-    calc_point[:Qg] = deepcopy(x_calc[[x.col for x in getindex(M.m, Symbol("Qg_$(c_id)_container"))]])
-    calc_point[:Vm] = deepcopy(x_calc[[x.col for x in getindex(M.m, Symbol("Vm_$(c_id)_container"))]])
-    calc_point[:Va] = deepcopy(x_calc[[x.col for x in getindex(M.m, Symbol("Va_$(c_id)_container"))]])
+    calc_point[:Pg] = deepcopy(x_calc[[x.col for x in getindex(M.m, Symbol("Pg_$(c_id)"))]])
+    calc_point[:Qg] = deepcopy(x_calc[[x.col for x in getindex(M.m, Symbol("Qg_$(c_id)"))]])
+    calc_point[:Vm] = deepcopy(x_calc[[x.col for x in getindex(M.m, Symbol("Vm_$(c_id)"))]])
+    calc_point[:Va] = deepcopy(x_calc[[x.col for x in getindex(M.m, Symbol("Va_$(c_id)"))]])
     return calc_point
 end
 
-
-function update_rating_limits(opfdata::OPFData, ratings::Array{Float64, 1}, pct::Union{Int, Float64})
-    rating_limits = opfdata.lines.rateA
-    updated_rating_limits = rating_limits
-    violating_idx = ratings .> rating_limits
-    updated_rating_limits[violating_idx] = ratings[violating_idx] * (1 + pct)
-    return updated_rating_limits
-end
-
-function get_infeasible_contingency_points(opfdata::OPFData, M::OPFModel, c_id::Int)
-    if !all(getvalue(M.m[Symbol("Vm_$(c_id)_container")]) .<= opfdata.buses.Vmax)
-        return findall(.!(getvalue(M.m[Symbol("Vm_$(c_id)_container")]) .<= opfdata.buses.Vmax))
-    elseif !all(getvalue(M.m[Symbol("Vm_$(c_id)_container")]) .>= opfdata.buses.Vmin)
-        return findall(.!(getvalue(M.m[Symbol("Vm_$(c_id)_container")]) .>= opfdata.buses.Vmin))
-    elseif !all(getvalue(M.m[Symbol("Qg_$(c_id)_container")]) .<= opfdata.generators.Qmax)
-        return findall(.!(getvalue(M.m[Symbol("Qg_$(c_id)_container")]) .<= opfdata.generators.Qmax))
-    elseif !all(getvalue(M.m[Symbol("Qg_$(c_id)_container")]) .>= opfdata.generators.Qmin)
-        return findall(.!(getvalue(M.m[Symbol("Qg_$(c_id)_container")]) .>= opfdata.generators.Qmin))
-    elseif !all(getvalue(M.m[Symbol("Pg_$(c_id)_container")]) .<= opfdata.generators.Pmax)
-        return findall(.!(getvalue(M.m[Symbol("Pg_$(c_id)_container")]) .<= opfdata.generators.Pmax))
-    elseif !all(getvalue(M.m[Symbol("Pg_$(c_id)_container")]) .>= opfdata.generators.Pmin)
-        return findall(.!(getvalue(M.m[Symbol("Pg_$(c_id)_container")]) .>= opfdata.generators.Pmin))
-    else
-        return Array{Int,1}()
+function update_limits!(opfdata::OPFData, ratings::Array{Float64,1}, viol_scale::Float64, nonviol_scale::Float64=1.0, verb=false)
+    viol_idx = ratings .>= opfdata.lines.rateA
+    opfdata.lines.rateA[viol_idx]   .= ratings[viol_idx]   .* viol_scale
+    opfdata.lines.rateA[.!viol_idx] .= max.(ratings[.!viol_idx] .* nonviol_scale, opfdata.lines.rateA[.!viol_idx])
+    if verb
+        println("highest limit on line $(argmax(opfdata.lines.rateA))")
     end
-end
-
-function set_slack_value!(M::OPFModel, c_id::Int, slack_index::Int)
-    setvalue(M.m[Symbol("Vm_$(c_id)_container")][slack_index], getvalue(M.m[:Vm][slack_index]))
-    setvalue(M.m[Symbol("Qg_$(c_id)_container")][slack_index], getvalue(M.m[:Qg][slack_index]))
-    setvalue(M.m[Symbol("Pg_$(c_id)_container")][slack_index], getvalue(M.m[:Pg][slack_index]))
 end
