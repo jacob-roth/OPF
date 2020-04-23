@@ -1,5 +1,4 @@
-function set_n1_limits!(opfdata::OPFData, options::Dict, adjustments::Dict,
-                        max_iter::Int=10, viol_scale::Float64=1.005, nonviol_scale::Float64=1.0)
+function set_n1_limits!(opfdata::OPFData, options::Dict, adjustments::Dict, contingencies::Dict; max_iter::Int=10, viol_scale::Float64=1.005, nonviol_scale::Float64=1.0)
 
     ## shortcuts
     lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
