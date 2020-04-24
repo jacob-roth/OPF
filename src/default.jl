@@ -29,6 +29,7 @@ function DefaultOptions()
   D[:shed_load]      = true    ## shed load?
   D[:ratelimit]      = 10.0    ## max upper bound on the transition rates
   D[:iterlim]        = Inf     ## max number of rounds of adding constraints
+  D[:VOLL]           = 5000    ## Value of lost load (can be Inf)
   return D
 end
 

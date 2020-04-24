@@ -20,7 +20,7 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
 
   ## objective
   if options[:shed_load]
-    @NLobjective(opfmodel, Min, sum((Ps[b] + Qs[b]) for b in 1:nbus))
+    @NLobjective(opfmodel, Min, sum(Ps[b] for b in 1:nbus))
   else
     setlowerbound.(Ps, 0); setupperbound.(Ps, 0)
     setlowerbound.(Qs, 0); setupperbound.(Qs, 0)
