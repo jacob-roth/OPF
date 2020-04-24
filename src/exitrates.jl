@@ -59,15 +59,19 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, opfdata::OPFData, options::
         if !updated
             minimize_cost && break
             minimize_cost = true
-            @NLobjective(opfmodel, Min, sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
-                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
-                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators]))
-            +(isinf(options[:VOLL]) ? 0 : sum((opfmodel[:Ps][b]+opfmodel[:Qs][b])*options[:VOLL] for b in 1:opfmodeldata[:nbus])))
             if isinf(options[:VOLL])
                 setlowerbound.(opfmodel[:Ps], solution[:Ps])
                 setupperbound.(opfmodel[:Ps], solution[:Ps])
                 setlowerbound.(opfmodel[:Qs], solution[:Qs])
                 setupperbound.(opfmodel[:Qs], solution[:Qs])
+                @NLobjective(opfmodel, Min, sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
+                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
+                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators])))
+            else
+                @NLobjective(opfmodel, Min, sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
+                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
+                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators])) +
+                                            sum((opfmodel[:Ps][b]+opfmodel[:Qs][b])*options[:VOLL] for b in 1:opfmodeldata[:nbus]))
             end
         end
     end
