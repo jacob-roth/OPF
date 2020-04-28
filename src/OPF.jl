@@ -1,4 +1,4 @@
-# module OPF
+module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra, NLsolve
 using MatrixNetworks, StructArrays, Distributed ## for setting n-1 limits
@@ -69,4 +69,4 @@ export jac_z
 include("sensitivities.jl")
 export get_Gamma, get_Gamma_fd, get_Gamma_ew
 
-# end # module
+end # module
