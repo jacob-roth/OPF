@@ -101,7 +101,8 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
             #
             obj_c = @NLexpression(m, sum(opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2] * (opfmodeldata[:baseMVA] * Pg_[i]) ^ 2 + opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1] * (opfmodeldata[:baseMVA] * Pg_[i]) +
                     opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n] for i=1:ngen))
-            obj_cs[c_id] = obj_c
+            c_idx = first(findall(c_id .== collect(keys(contingencies))))
+            obj_cs[c_idx] = obj_c
 
             #
             # power flow balance
@@ -148,21 +149,4 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
     @NLobjective(m, Min, objective_full)
 
     return OPFModel(m, :InitData, :SC)
-end
-
-function get_operating_points(opfmodel::JuMP.Model, contingencies::Dict)
-  ops = Dict()
-  for c_id in keys(contingencies)
-    D[:Pg] = deepcopy(getvalue(opfmodel[Symbol("Pg_$(c_id)_container")]))
-    D[:Qg] = deepcopy(getvalue(opfmodel[Symbol("Qg_$(c_id)_container")]))
-    D[:Vm] = deepcopy(getvalue(opfmodel[Symbol("Vm_$(c_id)_container")]))
-    D[:Va] = deepcopy(getvalue(opfmodel[Symbol("Va_$(c_id)_container")]))
-    ops[c_id] = deepcopy(D)
-  end
-  return ops
-end
-
-function get_operating_points(opfmodel::OPFModel, contingencies::Dict)
-  @assert(opfmodel.kind == :SC)
-  return get_operating_points(opfmodel.m, contingencies)
 end
