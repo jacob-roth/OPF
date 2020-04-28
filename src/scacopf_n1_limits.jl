@@ -94,27 +94,3 @@ function update_limits!(opfdata::OPFData, ratings::Array{Float64,1}, viol_scale:
         println("highest limit on line $(argmax(opfdata.lines.rateA))")
     end
 end
-
-function subset_contingencies(contingencies::Dict, num_subsets::Int)
-    num_contingencies = length(contingencies)
-    subset_chunks = num_contingencies ÷ num_subsets .* ones(Int, num_subsets)
-    cumsum_chunks = cumsum(subset_chunks)
-    subsetted_contingencies = Array{Dict}(undef, num_subsets)
-    for idx in 1:num_subsets
-        subsetted_contingencies[idx] = Dict()
-        if idx == 1
-            for i in 1:cumsum_chunks[idx]
-                subsetted_contingencies[idx][i] = contingencies[i]
-            end
-        elseif 1 < idx < num_subsets
-            for i in (cumsum_chunks[idx-1])+1 : cumsum_chunks[idx]
-                subsetted_contingencies[idx][i] = contingencies[i]
-            end
-        else
-            for i in cumsum_chunks[num_subsets-1]+1 : num_contingencies
-                subsetted_contingencies[idx][i] = contingencies[i]
-            end
-        end
-    end
-    return subsetted_contingencies
-end
