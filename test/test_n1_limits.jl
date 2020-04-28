@@ -131,6 +131,6 @@ point_0, M = get_scacopf_point(opfdata, options, adjustments, c)
 ##
 
 max_iter = 10
-viol_scale = 1.05
-nonviol_scale = 1.01
+viol_scale = 1.2
+nonviol_scale = 1.05
 set_n1_limits!(opfdata, options, adjustments, c, max_iter, viol_scale, nonviol_scale)
