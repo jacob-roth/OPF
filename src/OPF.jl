@@ -5,6 +5,7 @@ using MatrixNetworks, StructArrays, Distributed ## for setting n-1 limits
 using MPCCases
 using Printf
 using Pkg
+using Statistics
 ## based on: https://github.com/StructJuMP/StructJuMP.jl/tree/master/examples/PowerGrid
 
 mutable struct OPFModel
@@ -27,6 +28,9 @@ export acpf_model
 include("acopf_model.jl")
 export acopf_model
 
+include("agg_branch_files.jl")
+export write_new_limits, write_agg_branch_file
+
 include("s_acopf_model.jl")
 export s_acopf_model
 
@@ -34,7 +38,7 @@ include("acopf_zip_model.jl")
 export acopf_zip_model
 
 include("scacopf_model.jl")
-export scacopf_model, get_operating_points
+export scacopf_model
 
 include("scacopf_n1_limits.jl")
 export set_n1_limits!, get_acopf_point, get_scacopf_point, get_contingency_point, update_limits!

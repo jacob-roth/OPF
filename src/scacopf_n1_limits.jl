@@ -42,7 +42,7 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, adjustments::Dict, cont
             opfd = deepcopy(opfdata)
             removed_line = remove_line!(opfd, c_id)
             point_c      = get_contingency_point(M, c_id)
-            flowmag2s_c  = get_flowmag2s(point_c, opfd, options).flowmag2; splice!(flowmag2s_c, c_id:c_id-1, 0.0)
+            flowmag2s_c  = get_flowmag2s(point_c, opfd, options, true).flowmag2; splice!(flowmag2s_c, c_id:c_id-1, 0.0)
             ratings_c    = get_ratings(flowmag2s_c, opfd.baseMVA)
             update_limits!(opfdata, ratings_c, viol_scale, nonviol_scale)
             reinstate_line!(opfd, c_id, removed_line)
