@@ -556,7 +556,8 @@ function get_flowmag2s(VM::Array{Float64,1}, VA::Array{Float64,1}, Y::AbstractAr
         if !isempty(line)
             line = first(line)
             f = line.from; t = line.to
-            Y_tf = Y[t, f]; Y_ft = Y[f, t]
+            f_idx = first(findall(opfdata.buses.bus_i .== line.from)); t_idx = first(findall(opfdata.buses.bus_i .== line.to))
+            Y_tf = Y[t_idx, f_idx]; Y_ft = Y[f_idx, t_idx]
             ## NOTE: current from Frank & Rebennack OPF primer: eq 5.11 where turns/tap ratios are accounted for in `Y`
             Vm_f = VM[busIdx[f]]; Va_f = VA[busIdx[f]]
             Vm_t = VM[busIdx[t]]; Va_t = VA[busIdx[t]]

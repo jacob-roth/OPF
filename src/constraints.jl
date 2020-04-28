@@ -232,12 +232,12 @@ function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, 
     if line.rateA != 0 && line.rateA < 1.0e10
         flowmax=(line.rateA/baseMVA)^2
         # branch current flows
-        f = line.from
-        t = line.to
-        Y_tf = Y[t,f]
-        Y_ft = Y[f,t]
-        Vm_f = Vm[f]; Va_f = Va[f]
-        Vm_t = Vm[t]; Va_t = Va[t]
+        f = line.from; t = line.to
+        f_idx = first(findall(opfdata.buses.bus_i .== line.from)); t_idx = first(findall(opfdata.buses.bus_i .== line.to))
+        Y_tf = Y[t_idx,f_idx]
+        Y_ft = Y[f_idx,t_idx]
+        Vm_f = Vm[f_idx]; Va_f = Va[f_idx]
+        Vm_t = Vm[t_idx]; Va_t = Va[t_idx]
         Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
         ## NOTE: current from Frank & Rebennack OPF primer: eq 5.11 where turns/tap ratios are accounted for in `Y`
         F_l = @NLexpression(opfmodel, current2, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)) * Yabs2 - flowmax)

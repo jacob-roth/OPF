@@ -10,16 +10,18 @@ function set_n1_limits!(opfdata::OPFData, options::Dict, adjustments::Dict, cont
     opfdata.lines.rateA .= 0.0
     point_0, M = get_scacopf_point(opfdata, options, adjustments, contingencies)
     @assert(M.status == :Optimal)
-    flowmag2s_0 = get_flowmag2s(point_0, opfdata, options)
+    flowmag2s_0 = get_flowmag2s(point_0, opfdata, options, false)
     ratings_0   = get_ratings(flowmag2s_0.flowmag2, opfdata.baseMVA)
     ratings     = deepcopy(ratings_0)
     opfdata.lines.rateA .= max.(ratings, 1.0)
 
     ## compute initial ratings at c_id-contingency
     for c_id in keys(contingencies)
+        opfd = deepcopy(opfdata)
+        removed_line = remove_line!(opfd, c_id)
         point_c     = get_contingency_point(M, c_id)
-        flowmag2s_c = get_flowmag2s(point_c, opfdata, options)
-        ratings_c   = get_ratings(flowmag2s_c.flowmag2, opfdata.baseMVA)
+        flowmag2s_c = get_flowmag2s(point_c, opfd, options, true)
+        ratings_c   = get_ratings(flowmag2s_c.flowmag2, opfd.baseMVA)
         update_limits!(opfdata, ratings_c, viol_scale, nonviol_scale)
     end
 
