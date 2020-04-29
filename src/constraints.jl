@@ -233,7 +233,7 @@ function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, 
         flowmax=(line.rateA/baseMVA)^2
         # branch current flows
         f = line.from; t = line.to
-        f_idx = first(findall(opfdata.buses.bus_i .== line.from)); t_idx = first(findall(opfdata.buses.bus_i .== line.to))
+        f_idx = first(findall(opfmodeldata[:buses].bus_i .== line.from)); t_idx = first(findall(opfmodeldata[:buses].bus_i .== line.to))
         Y_tf = Y[t_idx,f_idx]
         Y_ft = Y[f_idx,t_idx]
         Vm_f = Vm[f_idx]; Va_f = Va[f_idx]

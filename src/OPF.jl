@@ -50,7 +50,7 @@ export scacopf_solve
 export RGL_id, RGL_idx, model_idx
 export PQnet
 export get_opfmodeldata
-export get_all_contingencies
+export get_all_contingencies, subset_contingencies
 export remove_line!, reinstate_line!
 export get_flowmag2s, get_ratings
 export get_islanding_buses, get_islanding_buses, get_nonislanding_contingencies
