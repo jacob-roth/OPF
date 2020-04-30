@@ -12,8 +12,8 @@ include("../src/OPF.jl")
 options = DefaultOptions()
 options[:current_rating] = true
 options[:lossless]       = true
-options[:remove_Bshunt]  = true
-options[:remove_tap]     = true
+options[:remove_Bshunt]  = false
+options[:remove_tap]     = false
 options[:shed_load]      = true
 options[:ratelimit]      = 1.0
 options[:print_level]    = 1

@@ -139,13 +139,16 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
   nbus  = length(buses); nline = length(lines); ngen  = length(generators)
 
   # OUTPUTING
-  println("Objective value: ", getobjectivevalue(opfmodel), "USD/hr")
   VM=getvalue(getindex(opfmodel,:Vm)); VA=getvalue(getindex(opfmodel,:Va))
   PG=getvalue(getindex(opfmodel,:Pg)); QG=getvalue(getindex(opfmodel,:Qg))
   PS=getvalue(getindex(opfmodel,:Ps)); QS=getvalue(getindex(opfmodel,:Qs))
   if kind == :S
     PD=getvalue(getindex(opfmodel,:Pd)); QD=getvalue(getindex(opfmodel,:Qd))
   end
+  println("Objective value: ", getobjectivevalue(opfmodel), ". Generation cost = ",
+    sum( generators[i].coeff[generators[i].n-2]*(baseMVA*PG[i])^2
+        +generators[i].coeff[generators[i].n-1]*(baseMVA*PG[i])
+        +generators[i].coeff[generators[i].n  ] for i=1:ngen), "USD/hr")
 
   println("============================= BUSES ==================================")
   println("  BUS    Vm     Va    |   Pg (MW)    Qg(MVAr)|   Ps (MW)    Qs(MVAr)  ")
