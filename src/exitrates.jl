@@ -68,10 +68,10 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, opfdata::OPFData, options::
                                             +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
                                             +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators])))
             else
-                @NLobjective(opfmodel, Min, sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
+                @NLobjective(opfmodel, Min, (sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
                                             +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
-                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators])) +
-                                            sum((opfmodel[:Ps][b]+opfmodel[:Qs][b])*options[:VOLL] for b in 1:opfmodeldata[:nbus]))
+                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators]))/options[:VOLL]) +
+                                            sum((opfmodel[:Ps][b]+opfmodel[:Qs][b]) for b in 1:opfmodeldata[:nbus]))
             end
         end
     end
@@ -85,7 +85,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, opfdata::OPFData, options::
         ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)
         if ep2 != nothing
             exitrate2 = ep2[:prefactor] * ep2[:expterm]
-            println("Compare ---> ", exitrate, " ", exitrate2)
+            println("Compare ---> line ", l, ": approx=", exitrate, " exact=", exitrate2)
         end
     end
     =#
@@ -141,7 +141,7 @@ function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
     Qg = getvalue(getindex(opfmodel,:Qg))
     for x in enumerate(opfmodeldata[:generators])
         g,gid = x[2],x[1]
-        idx = g.bus
+        idx = opfmodeldata[:BusIdx][g.bus]
         solution[:Pg_full][idx] = Pg[gid]
         solution[:Qg_full][idx] = Qg[gid]
     end
@@ -408,7 +408,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     #
     # KKT conditions - primal feasibility
     #
-    @NLconstraint(opfmodel, (Vmi^2 + Vmj^2 - 2*Vmi*Vmj*cos(Vai-Vaj)) - flowmax == 0)
+    @NLconstraint(opfmodel, baseMVA*(Vmi^2 + Vmj^2 - (2*Vmi*Vmj*cos(Vai-Vaj)) - flowmax) == 0)
 
     #
     # KKT conditions - stationarity
@@ -573,7 +573,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     @NLconstraint(opfmodel,
                     1.5log(Kstar) + log(norm_squared_grad_h) -
                     (Kstar*xstar_minus_xbar_times_grad_h/2options[:temperature]) -
-                    0.5log(sqrt(denom^2 + 1.0e-12)) -
+                    0.5log(sqrt(denom^2 + 1.0e-16)) -
                     log(options[:ratelimit]*sqrt(2*pi*options[:temperature])/options[:damping])
                     <= 0
                 )
@@ -639,7 +639,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     #
     # Line failure constraint
     #
-    @NLconstraint(em, (Vm[i]^2 + Vm[j]^2 - 2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax == 0)
+    @NLconstraint(em, baseMVA*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax) == 0)
 
 
     #
@@ -730,7 +730,8 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     line         = opfmodeldata[:lines][l]
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
     bus_ref      = opfmodeldata[:bus_ref]
-    flowmax      = (options[:emergencylimit]*line.rateA/(abs(1.0/(line.x*im))*opfmodeldata[:baseMVA]))^2
+    baseMVA      = opfmodeldata[:baseMVA]
+    flowmax      = (options[:emergencylimit]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
@@ -772,7 +773,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     #
     # KKT - Primal feasibility
     #
-    @NLconstraint(em, (Vm[i]^2 + Vm[j]^2 - 2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax == 0)
+    @NLconstraint(em, baseMVA*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax) == 0)
 
 
     #
