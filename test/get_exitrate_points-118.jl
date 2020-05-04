@@ -99,8 +99,8 @@ options = DefaultOptions()
 options[:emergencylimit] = 1.2
 options[:current_rating] = true
 options[:lossless]       = true
-options[:remove_Bshunt]  = false
-options[:remove_tap]     = false
+options[:remove_Bshunt]  = true
+options[:remove_tap]     = true
 options[:shed_load]      = true
 options[:ratelimit]      = 1.0
 options[:print_level]    = 1
@@ -123,7 +123,7 @@ opfmodel = acopf_model(opfdata, options)
 opfmodel_exitrates = acopf_solve_exitrates(opfmodel, opfdata, options)
 acopf_outputAll(opfmodel_exitrates, opfdata, options) # Objective value: 125948.01275120632. Generation cost = 125948.01411818918USD/hr
 optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
-file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/emergency=20pct/inf/118bus_inf"
+file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/ntap-nshunt/emergency=20pct/inf/118bus_inf"
 write_optimal_values(file_out, optimal_values)
 
 ## 1e-1 (line 125 infeasible)
@@ -133,7 +133,7 @@ opfmodel = acopf_model(opfdata, options)
 opfmodel_exitrates = acopf_solve_exitrates(opfmodel, opfdata, options)
 acopf_outputAll(opfmodel_exitrates, opfdata, options) # Objective value: 125948.01275120632. Generation cost = 125948.01411818918USD/hr
 optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
-file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/emergency=20pct/1e-1/118bus_1e-1"
+file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/ntap-nshunt/emergency=20pct/1e-1/118bus_1e-1"
 write_optimal_values(file_out, optimal_values)
 
 ## 1e-2 (line 113 & 125 infeasible)
@@ -143,7 +143,7 @@ opfmodel = acopf_model(opfdata, options)
 opfmodel_exitrates = acopf_solve_exitrates(opfmodel, opfdata, options)
 acopf_outputAll(opfmodel_exitrates, opfdata, options) # Objective value: 125952.14720358636. Generation cost = 125952.14859522428USD/hr
 optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
-file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/emergency=20pct/1e-2/118bus_1e-2"
+file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/ntap-nshunt/emergency=20pct/1e-2/118bus_1e-2"
 write_optimal_values(file_out, optimal_values)
 
 ## 1e-3
@@ -153,7 +153,7 @@ opfmodel = acopf_model(opfdata, options)
 opfmodel_exitrates = acopf_solve_exitrates(opfmodel, opfdata, options)
 acopf_outputAll(opfmodel_exitrates, opfdata, options) # Objective value: 125976.00455718602. Generation cost = 125976.00594848282USD/hr
 optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
-file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/emergency=20pct/1e-3/118bus_1e-3"
+file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/ntap-nshunt/emergency=20pct/1e-3/118bus_1e-3"
 write_optimal_values(file_out, optimal_values)
 
 ## 5e-4 (line 3 & 37 infeasible)
@@ -163,7 +163,7 @@ opfmodel = acopf_model(opfdata, options)
 opfmodel_exitrates = acopf_solve_exitrates(opfmodel, opfdata, options)
 acopf_outputAll(opfmodel_exitrates, opfdata, options) # Objective value: 125984.65968474935. Generation cost = 125984.66107594887USD/hr
 optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
-file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/emergency=20pct/5e-4/118bus_5e-4"
+file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/ntap-nshunt/emergency=20pct/5e-4/118bus_5e-4"
 write_optimal_values(file_out, optimal_values)
 
 ## 1e-5 (infeasible)
@@ -173,7 +173,7 @@ write_optimal_values(file_out, optimal_values)
 # opfmodel_exitrates = acopf_solve_exitrates(opfmodel, opfdata, options)
 # acopf_outputAll(opfmodel_exitrates, opfdata, options) # 0
 # optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
-# file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/emergency=20pct/1e-5/118bus_1e-5"
+# file_out = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus-lowdamp/ntap-nshunt/emergency=20pct/1e-5/118bus_1e-5"
 # write_optimal_values(file_out, optimal_values)
 
 ## -----------------------------------------------------------------------------
