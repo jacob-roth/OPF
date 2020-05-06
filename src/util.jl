@@ -417,6 +417,7 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
     current_rating = options[:current_rating]
     remove_Bshunt  = options[:remove_Bshunt]
     remove_tap     = options[:remove_tap]
+    loss_scale     = options[:loss_scale]
     print_level    = options[:print_level]
     feasibility    = options[:feasibility]
     Pg_hi          = adjustments[:Pg_hi]
@@ -433,11 +434,29 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
     # shortcuts for compactness
     lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
     busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
+    nbus = length(buses); nline = length(lines); ngen = length(generators)
 
     # branch admitances
-    YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA, lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
-
+    YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA;
+                                                        lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap, loss_scale=loss_scale)
     Y = computeAdmittanceMatrix(opfdata, options)
+
+    # helpful quantities
+    nonLoadBuses = findall(!isempty, BusGeners)
+    push!(nonLoadBuses, opfdata.bus_ref)
+    sort!(nonLoadBuses)
+    unique!(nonLoadBuses)
+    linindex_VMr = zeros(Int64, nbus)
+    linindex_VAr = zeros(Int64, nbus)
+    i = 0
+    for n in 1:nbus
+      n in nonLoadBuses && continue
+      linindex_VMr[n] = i+=1
+    end
+    for n in 1:nbus
+      n == opfdata.bus_ref && continue
+      linindex_VAr[n] = i+=1
+    end
 
     opfmodeldata              = Dict()
     opfmodeldata[:lines]      = deepcopy(lines);
@@ -459,6 +478,12 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
     opfmodeldata[:YshR]       = deepcopy(YshR);
     opfmodeldata[:YshI]       = deepcopy(YshI);
     opfmodeldata[:Y]          = deepcopy(Y);
+    opfmodeldata[:nonLoadBuses] = deepcopy(nonLoadBuses);
+    opfmodeldata[:bus_ref]    = opfdata.bus_ref;
+    opfmodeldata[:nbus]       = nbus
+    opfmodeldata[:nloads]     = nbus - length(nonLoadBuses)
+    opfmodeldata[:linindex_VMr] = deepcopy(linindex_VMr)
+    opfmodeldata[:linindex_VAr] = deepcopy(linindex_VAr)
     return opfmodeldata
 end
 

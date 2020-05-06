@@ -4,6 +4,7 @@
 function DefaultOptions()
   D                  = Dict()
   D[:lossless]       = false   ## lossless transmission lines?
+  D[:loss_scale]     = 1.0     ## scaling of real component of admittance elements
   D[:current_rating] = false   ## use |i| for line limits?
   D[:remove_Bshunt]  = false   ## remove susceptance from shunt?
   D[:remove_tap]     = false   ## remove tap adjustments?
