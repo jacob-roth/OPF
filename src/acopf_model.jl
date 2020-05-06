@@ -10,7 +10,7 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   @variable(opfmodel, opfmodeldata[:generators][i].Pmin <= Pg[i=1:ngen] <= opfmodeldata[:generators][i].Pmax)
   @variable(opfmodel, opfmodeldata[:generators][i].Qmin <= Qg[i=1:ngen] <= opfmodeldata[:generators][i].Qmax)
   @variable(opfmodel, opfmodeldata[:buses][i].Vmin <= Vm[i=1:nbus] <= opfmodeldata[:buses][i].Vmax)
-  @variable(opfmodel, -pi <= Va[1:nbus] <= pi)
+  @variable(opfmodel, opfmodeldata[:lines][i].angmin <= Va[i=1:nbus] <= opfmodeldata[:lines][i].angmax)
 
   ## fix the voltage angle at the reference bus
   setlowerbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
