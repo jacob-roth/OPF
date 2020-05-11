@@ -72,5 +72,5 @@ end
 function get_ang_bounds(opfmodeldata::Dict, from_idx::Int, to_idx::Int)
     all_lines = opfmodeldata[:lines]
     target_line = all_lines[(all_lines.from .== from_idx) .& (all_lines.to .== to_idx)]
-    return (target_line.angmin, target_line.angmax)
+    return (target_line.angmin..., target_line.angmax...)
 end
