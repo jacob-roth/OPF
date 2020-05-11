@@ -10,7 +10,13 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   @variable(opfmodel, opfmodeldata[:generators][i].Pmin <= Pg[i=1:ngen] <= opfmodeldata[:generators][i].Pmax)
   @variable(opfmodel, opfmodeldata[:generators][i].Qmin <= Qg[i=1:ngen] <= opfmodeldata[:generators][i].Qmax)
   @variable(opfmodel, opfmodeldata[:buses][i].Vmin <= Vm[i=1:nbus] <= opfmodeldata[:buses][i].Vmax)
-  @variable(opfmodel, opfmodeldata[:lines][i].angmin * pi / 180 <= Va[i=1:nbus] <= opfmodeldata[:lines][i].angmax * pi / 180)
+  @variable(opfmodel, -pi <= Va[i=1:nbus] <= pi)
+
+  line_ids = get_line_ids(opfmodeldata)
+  for (from_idx, to_idx) in line_ids
+    angmin, angmax = get_ang_bounds(opfmodeldata, from_idx, to_idx)
+    @constraint(opfmodel, angmin * pi / 180 <= Va[from_idx] - Va[to_idx] <= angmax * pi / 180)
+  end
 
   ## fix the voltage angle at the reference bus
   setlowerbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
@@ -54,4 +60,17 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
     @printf("Buses: %d  Lines: %d  Generators: %d \n", nbus, nline, ngen)
   end
   return OPFModel(opfmodel, :InitData, :D)
+end
+
+function get_line_ids(opfmodeldata::Dict)
+    num_lines = length(opfmodeldata[:lines])
+    from_lines = opfmodeldata[:lines].from
+    to_lines = opfmodeldata[:lines].to
+    return [(from_lines[i], to_lines[i]) for i in 1:num_lines]
+end
+
+function get_ang_bounds(opfmodeldata::Dict, from_idx::Int, to_idx::Int)
+    all_lines = opfmodeldata[:lines]
+    target_line = lines[(lines.from .== from_idx) .& (lines.to .== to_idx)]
+    return (target_line.angmin, target_line.angmax)
 end
