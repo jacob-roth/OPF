@@ -10,11 +10,12 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   @variable(opfmodel, opfmodeldata[:generators][i].Pmin <= Pg[i=1:ngen] <= opfmodeldata[:generators][i].Pmax)
   @variable(opfmodel, opfmodeldata[:generators][i].Qmin <= Qg[i=1:ngen] <= opfmodeldata[:generators][i].Qmax)
   @variable(opfmodel, opfmodeldata[:buses][i].Vmin <= Vm[i=1:nbus] <= opfmodeldata[:buses][i].Vmax)
+  @variable(opfmodel, -pi <= Va[i=1:nbus] <= pi)
 
   line_ids = get_line_ids(opfmodeldata)
   for (from_idx, to_idx) in line_ids
     angmin, angmax = get_ang_bounds(opfmodeldata, from_idx, to_idx)
-    @variable(opfmodel, max(-pi, angmin * pi / 180) <= Va[from_idx] - Va[to_idx] <= min(pi, angmax * pi / 180))
+    @constraint(opfmodel, angmin * pi / 180 <= Va[from_idx] - Va[to_idx] <= angmax * pi / 180)
   end
 
   ## fix the voltage angle at the reference bus
