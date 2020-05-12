@@ -27,7 +27,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
         ## solve
         status = solve(opfmodel)
         if status != :Optimal
-            return opfmodel, status
+            break
         end
 
         ## Get optimal values
@@ -91,7 +91,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
             rates[l] = exitrate2
             prefactors[l] = ep2[:prefactor]
             expterms[l] = ep2[:expterm]
-            println("Compare ---> line ", l, ": approx=", exitrate, " exact=", exitrate2)
+            @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, exitrate2, abs(log(exitrate/exitrate2)))
         end
     end
 
@@ -100,8 +100,8 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
     other[:expterms] = expterms
     return (opfmodel, status), other
 end
-function acopf_solve_exitrates(M::OPFModel, opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)
-    opfm = acopf_solve_exitrates(M.m, opfdata, options, adjustments, warm_point_given, M.other)
+function acopf_solve_exitrates(M::OPFModel, casedata::CaseData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)
+    opfm = acopf_solve_exitrates(M.m, casedata, options, adjustments, warm_point_given, M.other)
     return OPFModel(opfm[1]..., M.kind, M.other)
 end
 
@@ -475,6 +475,13 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
             ##        S[c]
             ##        S[d]
         )
+    norm_squared_grad_h_weighted_S =
+        @NLexpression(opfmodel,
+            ((a > 0 ? S[a] : 0.0)*( Vmi-(Vmj*cos(Vai - Vaj)))^2) +
+            ((b > 0 ? S[b] : 0.0)*( Vmj-(Vmi*cos(Vai - Vaj)))^2) +
+            ((c > 0 ? S[c] : 0.0)*( Vmi* Vmj*sin(Vai - Vaj))^2) +
+            ((d > 0 ? S[d] : 0.0)*(-Vmi* Vmj*sin(Vai - Vaj))^2)
+        )
     xstar_minus_xbar_times_grad_h =
         @NLexpression(opfmodel,
             ((Vmi - Vm[i])*( Vmi-(Vmj*cos(Vai - Vaj)))) +
@@ -589,7 +596,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     #
     #@NLconstraint(opfmodel, denom >= 0)
     @NLconstraint(opfmodel,
-                    1.5log(Kstar) + log(norm_squared_grad_h) -
+                    1.5log(Kstar) + log(norm_squared_grad_h_weighted_S) -
                     (Kstar*xstar_minus_xbar_times_grad_h/2options[:temperature]) -
                     0.5log(sqrt(denom^2 + 1.0e-16)) -
                     log(options[:ratelimit]*sqrt(2*pi*options[:temperature])/options[:damping])
@@ -721,7 +728,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     z2         = grad_H_xstar' * (tempM\grad_H_xstar)
     z3         = sqrt(abs(z1/z2))
     kappa      = Kstar^3/z3
-    prefactor  = z3 * (grad_H_xstar'*S*grad_H_xstar) * (options[:damping]/sqrt(2*pi*options[:temperature]) )
+    prefactor  = z3 * sum(S.*grad_H_xstar.^2) * (options[:damping]/sqrt(2*pi*options[:temperature]) )
     energydiff = H_xstar - xbar[:H_xbar]
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     caputil    = 100.0 * options[:constr_limit_scale] * sqrt(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j]))/sqrt(flowmax)
@@ -753,6 +760,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
     bus_ref      = opfmodeldata[:bus_ref]
     baseMVA      = opfmodeldata[:baseMVA]
+    S            = opfmodeldata[:S]
     # flowmax      = (options[:constr_limit_scale]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
     flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
     nbus         = length(buses)
@@ -923,6 +931,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     ##
     ## Just for sanity check -- comment out after debugging
     ##
+    #=
     xstar_minus_xbar_times_grad_h_check =
         ((VMstar[i] - VMbar[i])*( VMstar[i]-(VMstar[j]*cos(VAstar[i] - VAstar[j])))) +
         ((VMstar[j] - VMbar[j])*( VMstar[j]-(VMstar[i]*cos(VAstar[i] - VAstar[j])))) +
@@ -933,11 +942,18 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
         ((b > 0 ? 1.0 : 0.0)*( VMstar[j]-(VMstar[i]*cos(VAstar[i] - VAstar[j])))^2) +
         ((c > 0 ? 1.0 : 0.0)*( VMstar[i]* VMstar[j]*sin(VAstar[i] - VAstar[j]))^2) +
         ((d > 0 ? 1.0 : 0.0)*(-VMstar[i]* VMstar[j]*sin(VAstar[i] - VAstar[j]))^2)
+    norm_squared_grad_h_weighted_S_check =
+        ((a > 0 ? S[a] : 0.0)*( VMstar[i]-(VMstar[j]*cos(VAstar[i] - VAstar[j])))^2) +
+        ((b > 0 ? S[b] : 0.0)*( VMstar[j]-(VMstar[i]*cos(VAstar[i] - VAstar[j])))^2) +
+        ((c > 0 ? S[c] : 0.0)*( VMstar[i]* VMstar[j]*sin(VAstar[i] - VAstar[j]))^2) +
+        ((d > 0 ? S[d] : 0.0)*(-VMstar[i]* VMstar[j]*sin(VAstar[i] - VAstar[j]))^2)
     hess_h = ∇2h([VMstar_r; VAstar_r]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
     hess_h = 0.5*(hess_h + hess_h')
     @assert maximum(abs.((L*D*L') - hess_h)) <= 1e-8
     @assert abs(norm_squared_grad_h_check - norm(grad_h)^2) <= 1e-8
+    @assert abs(norm_squared_grad_h_weighted_S_check - sum(S.*grad_h.^2)) <= 1e-8
     @assert abs(xstar_minus_xbar_times_grad_h_check - xstar_minus_xbar_times_grad_h) <= 1e-8
+    =#
     ##
     ##
 
@@ -954,7 +970,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
         (options[:print_level] >= 1) && println("warning: unable to compute KKT exit rate for line ", l, " = (", i, ",", j, "). kappa = ", kappa, " (negative)")
         return nothing
     end
-    prefactor  = Kstar^(1.5) * norm(grad_h)^2 * (options[:damping]/sqrt(2*pi*options[:temperature]) ) / sqrt(kappa)
+    prefactor  = Kstar^(1.5) * sum(S.*grad_h.^2) * (options[:damping]/sqrt(2*pi*options[:temperature]) ) / sqrt(kappa)
     energydiff = Kstar * xstar_minus_xbar_times_grad_h/2.0
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     ## line capacity utilization
