@@ -153,7 +153,8 @@ end
 #
 i = opfmodeldata[:BusIdx][line.from]
 j = opfmodeldata[:BusIdx][line.to]
-@NLconstraint(em, fail, baseMVA*( flowmax - abs(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j]))) ) == 0)
+# @NLconstraint(em, fail, baseMVA*( flowmax - abs(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j]))) ) == 0)
+@NLconstraint(em, fail, baseMVA*( flowmax - (Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j]))) ) == 0)
 
 #
 # initial value
