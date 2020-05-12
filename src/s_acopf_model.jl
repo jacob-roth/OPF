@@ -126,5 +126,5 @@ function s_acopf_model(opfdata, options::Dict=Dict())
   @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
   println("Lines with limits  ", nlinelim)
 
-  return OPFModel(opfmodel, :InitData, :S)
+  return OPFModel(opfmodel, :InitData, :S, Dict())
 end

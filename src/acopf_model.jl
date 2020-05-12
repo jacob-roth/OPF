@@ -59,5 +59,5 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   if options[:print_level] >= 1
     @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
   end
-  return OPFModel(opfmodel, :InitData, :D)
+  return OPFModel(opfmodel, :InitData, :D, Dict())
 end

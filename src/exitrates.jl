@@ -1,7 +1,7 @@
 ## -----------------------------------------------------------------------------
 ## Solve ACOPF with transition rate constraints for line current limits
 ## -----------------------------------------------------------------------------
-function acopf_solve_exitrates(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)
+function acopf_solve_exitrates(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false, other=Dict())
     ##
     opfmodeldata = get_opfmodeldata(opfdata, options, adjustments)
     lines        = opfmodeldata[:lines]
@@ -76,23 +76,32 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, opfdata::OPFData, options::
         end
     end
 
-    #=
-    for l in lines_with_added_rate_constraints
+    rates = zeros(length(lines))
+    prefactors = zeros(length(lines))
+    expterms = zeros(length(lines))
+    for l in eachindex(lines)
         exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
         (exit_point == nothing) && continue
         exitrate = exit_point[:prefactor] * exit_point[:expterm]
 
-        ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)
+        ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
         if ep2 != nothing
             exitrate2 = ep2[:prefactor] * ep2[:expterm]
+            rates[l] = exitrate2
+            prefactors[l] = ep2[:prefactor]
+            expterms[l] = ep2[:expterm]
             println("Compare ---> line ", l, ": approx=", exitrate, " exact=", exitrate2)
         end
     end
-    =#
-    return opfmodel, status
+
+    other[:rates] = rates
+    other[:prefactors] = prefactors
+    other[:expterms] = expterms
+    return (opfmodel, status), other
 end
 function acopf_solve_exitrates(M::OPFModel, opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)
-    return OPFModel(acopf_solve_exitrates(M.m, opfdata, options, adjustments, warm_point_given)..., M.kind)
+    opfm = acopf_solve_exitrates(M.m, opfdata, options, adjustments, warm_point_given, M.other)
+    return OPFModel(opfm[1]..., M.kind, M.other)
 end
 
 
@@ -176,9 +185,8 @@ function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
 end
 
 function write_optimal_values(file::String, optimal_values::Dict)
-    optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
     for k in keys(optimal_values)
-        open("$(file)_$(string(k)).csv", "w") do io
+        open("$(file)$(string(k)).csv", "w") do io
             writedlm(io, optimal_values[k])
         end
     end
@@ -335,7 +343,8 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     Y            = opfmodeldata[:Y]
     line         = opfmodeldata[:lines][l]
     nrow         = 2nbus - length(nonLoadBuses) - 1
-    flowmax      = (options[:emergencylimit]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
+    # flowmax      = (options[:constr_limit_scale]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
     i            = opfmodeldata[:BusIdx][line.from]
     j            = opfmodeldata[:BusIdx][line.to]
     Vm           = opfmodel[:Vm]
@@ -591,11 +600,13 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
     bus_ref      = opfmodeldata[:bus_ref]
     Y            = opfmodeldata[:Y]
-    flowmax      = (options[:emergencylimit]*line.rateA/(abs(1.0/(line.x*im))*opfmodeldata[:baseMVA]))^2
+    # flowmax      = options[:constr_limit_scale]*(line.rateA/(abs(1.0/(line.x*im))*opfmodeldata[:baseMVA]))^2
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
     VAbar        = xbar[:Va]
+    baseMVA      = opfmodeldata[:baseMVA]
 
 
 
@@ -639,7 +650,8 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     #
     # Line failure constraint
     #
-    @NLconstraint(em, baseMVA*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax) == 0)
+    # @NLconstraint(em, baseMVA*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax) == 0)
+    @NLconstraint(em, baseMVA*( flowmax - abs(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j]))) ) == 0)
 
 
     #
@@ -702,7 +714,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     prefactor  = z3 * norm(grad_H_xstar)^2 * (options[:damping]/sqrt(2*pi*options[:temperature]) )
     energydiff = H_xstar - xbar[:H_xbar]
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
-    caputil    = 100.0 * options[:emergencylimit] * sqrt(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j]))/sqrt(flowmax)
+    caputil    = 100.0 * options[:constr_limit_scale] * sqrt(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j]))/sqrt(flowmax)
     if isnan(kappa)
         (options[:print_level] >= 1) && println("warning: unable to compute EXACT exit rate for line ", l, " = (", i, ",", j, "). kappa = ", kappa, " (NaN)")
         return nothing
@@ -731,7 +743,8 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
     bus_ref      = opfmodeldata[:bus_ref]
     baseMVA      = opfmodeldata[:baseMVA]
-    flowmax      = (options[:emergencylimit]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
+    # flowmax      = (options[:constr_limit_scale]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
@@ -773,6 +786,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     #
     # KKT - Primal feasibility
     #
+    # @NLconstraint(em, baseMVA*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax) == 0)
     @NLconstraint(em, baseMVA*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax) == 0)
 
 
@@ -934,7 +948,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     energydiff = Kstar * xstar_minus_xbar_times_grad_h/2.0
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     ## line capacity utilization
-    caputil    = 100.0 * options[:emergencylimit] * sqrt(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j]))/sqrt(flowmax)
+    caputil    = 100.0 * options[:constr_limit_scale] * sqrt(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j]))/sqrt(flowmax)
 
     if prefactor < 0 || isnan(prefactor)
         (options[:print_level] >= 1) && println("warning: unable to compute KKT exit rate for line ", l, " = (", i, ",", j, "). prefactor = ", prefactor, " (negative)")

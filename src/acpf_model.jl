@@ -144,5 +144,5 @@ function acpf_model(dispatch_point::Dict, opfdata, options::Dict=DefaultOptions(
   if print_level >= 1
     @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
   end
-  return OPFModel(opfmodel, :InitData, :D)
+  return OPFModel(opfmodel, :InitData, :D, Dict())
 end

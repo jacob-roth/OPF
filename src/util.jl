@@ -26,7 +26,7 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   end
   return opfmodel, status
 end
-function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind); end
+function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind, M.other); end
 
 function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
 
@@ -41,7 +41,7 @@ function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   end
   return opfmodel, status
 end
-function acpf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acpf_solve(M.m, opfdata)..., M.kind); end
+function acpf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acpf_solve(M.m, opfdata)..., M.kind, M.other); end
 
 function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, contingencies::Dict, warm_point=false)
   nbus = length(opfdata.buses); nline = length(opfdata.lines); ngen = length(opfdata.generators)
@@ -90,7 +90,7 @@ function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, co
   end
   return opfmodel, status
 end
-function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false); return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind); end
+function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false); return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind, M.other); end
 
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)

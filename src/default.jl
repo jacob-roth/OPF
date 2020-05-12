@@ -23,9 +23,9 @@ function DefaultOptions()
   #
   # Options for enforcing transition rate limits
   #
-  D[:damping]        = 0.01    ## damping coefficient
+  D[:damping]        = 1.0     ## damping coefficient
   D[:temperature]    = 0.0001  ## temperature
-  D[:emergencylimit] = 1.2     ## line limits will be multiplied by this factor
+  D[:constr_limit_scale] = 1.2 ## line limits will be multiplied by this factor
   D[:shed_load]      = true    ## shed load?
   D[:ratelimit]      = 10.0    ## max upper bound on the transition rates
   D[:iterlim]        = Inf     ## max number of rounds of adding constraints

@@ -102,7 +102,7 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(),
       reinstate_line!(opfdata, rl.id, rl);
     end
   end
-  return OPFModel(m, :InitData, :SC)
+  return OPFModel(m, :InitData, :SC, Dict())
 end
 
 function get_operating_points(opfmodel::JuMP.Model, contingencies::Dict)

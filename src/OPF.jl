@@ -11,6 +11,7 @@ mutable struct OPFModel
     m::JuMP.Model
     status::Symbol
     kind::Symbol
+    other::Dict
 end
 export OPFModel
 
