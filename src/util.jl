@@ -446,6 +446,49 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
   return opfmodeldata
 end
 
+function get_opfmodeldata(casedata::CaseData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
+  opfmodeldata = get_opfmodeldata(casedata.opf, options, adjustments)
+  opfmodeldata[:S] = get_S(casedata)
+  return opfmodeldata
+end
+
+function get_S(casedata::CaseData)
+  nbus  = length(casedata.opf.buses)
+  ngen  = length(casedata.opf.generators)
+  nxr   = (nbus-1) + (nbus-ngen)
+  phys  = casedata.phys
+  slack = casedata.opf.bus_ref
+  gen   = casedata.opf.generators.bus
+  load  = filter!(x -> x ∉ gen, collect(1:nbus))
+  nload = length(load)
+
+  # idxs  = [filter!(x -> x ∉ slack, collect(1:nbus)); load]
+  # Sdiag = zeros(Float64, nxr)
+  # for e in enumerate(idxs)
+  #   i  = e[1]
+  #   ii = e[2]
+  #   if (ii in load) && (i <= nbus-1)
+  #     Sdiag[i] = 1.0 / phys[ii].D
+  #   elseif (ii in load) && (i > nbus-1)
+  #     Sdiag[i] = 1.0 / phys[ii].Dv
+  #   end
+  # end
+
+  idxs  = [load; filter!(x -> x ∉ slack, collect(1:nbus))]
+  Sdiag = zeros(Float64, nxr)
+  for e in enumerate(idxs)
+    i  = e[1]
+    ii = e[2]
+    if (ii in load) && (i <= nload)
+      Sdiag[i] = 1.0 / phys[ii].Dv
+    elseif (ii in load) && (i > nload)
+      Sdiag[i] = 1.0 / phys[ii].D
+    end
+  end
+
+  return Sdiag
+end
+
 function update_loadings!(opfdata::OPFData, options::Dict,
                           loading::Float64=DefaultLoading(), adj_pf::Float64=DefaultAdjPF())
     Pd_new, Qd_new = get_loadings(opfdata, options, loading, adj_pf)

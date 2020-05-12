@@ -1,9 +1,10 @@
 ## -----------------------------------------------------------------------------
 ## Solve ACOPF with transition rate constraints for line current limits
 ## -----------------------------------------------------------------------------
-function acopf_solve_exitrates(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false, other=Dict())
-    ##
-    opfmodeldata = get_opfmodeldata(opfdata, options, adjustments)
+function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false, other=Dict())
+    ## setup
+    opfdata, physdata = casedata.opf, casedata.phys
+    opfmodeldata = get_opfmodeldata(casedata, options, adjustments)
     lines        = opfmodeldata[:lines]
     busIdx       = opfmodeldata[:BusIdx]
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
@@ -287,6 +288,7 @@ function add_kkt_stationarity_constraint!(opfmodel::JuMP.Model, opfmodeldata::Di
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
     bus_ref = opfmodeldata[:bus_ref]
     Y = opfmodeldata[:Y]
+    S = opfmodeldata[:S]
 
     Vmi = (i in nonLoadBuses) ? Vmbar[i] : Vmstar[i]
     Vmj = (j in nonLoadBuses) ? Vmbar[j] : Vmstar[j]
@@ -341,6 +343,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     bus_ref      = opfmodeldata[:bus_ref]
     baseMVA      = opfmodeldata[:baseMVA]
     Y            = opfmodeldata[:Y]
+    S            = opfmodeldata[:S]
     line         = opfmodeldata[:lines][l]
     nrow         = 2nbus - length(nonLoadBuses) - 1
     # flowmax      = (options[:constr_limit_scale]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
@@ -417,7 +420,8 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     #
     # KKT conditions - primal feasibility
     #
-    @NLconstraint(opfmodel, baseMVA*(Vmi^2 + Vmj^2 - (2*Vmi*Vmj*cos(Vai-Vaj)) - flowmax) == 0)
+    # @NLconstraint(opfmodel, baseMVA*(Vmi^2 + Vmj^2 - (2*Vmi*Vmj*cos(Vai-Vaj)) - flowmax) == 0)
+    @NLconstraint(opfmodel, baseMVA*(flowmax - (Vmi^2 + Vmj^2 - (2*Vmi*Vmj*cos(Vai-Vaj)))) == 0)
 
     #
     # KKT conditions - stationarity
@@ -465,6 +469,11 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
             ((b > 0 ? 1.0 : 0.0)*( Vmj-(Vmi*cos(Vai - Vaj)))^2) +
             ((c > 0 ? 1.0 : 0.0)*( Vmi* Vmj*sin(Vai - Vaj))^2) +
             ((d > 0 ? 1.0 : 0.0)*(-Vmi* Vmj*sin(Vai - Vaj))^2)
+            ## !NOTE! can access grad_H_xstarᵀ S grad_H_xstar elements of S with:
+            ##        S[a]
+            ##        S[b]
+            ##        S[c]
+            ##        S[d]
         )
     xstar_minus_xbar_times_grad_h =
         @NLexpression(opfmodel,
@@ -600,6 +609,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
     bus_ref      = opfmodeldata[:bus_ref]
     Y            = opfmodeldata[:Y]
+    S            = opfmodeldata[:S]
     # flowmax      = options[:constr_limit_scale]*(line.rateA/(abs(1.0/(line.x*im))*opfmodeldata[:baseMVA]))^2
     flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
     nbus         = length(buses)
@@ -651,7 +661,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     # Line failure constraint
     #
     # @NLconstraint(em, baseMVA*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax) == 0)
-    @NLconstraint(em, baseMVA*( flowmax - abs(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j]))) ) == 0)
+    @NLconstraint(em, baseMVA*( flowmax - (Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j]))) ) == 0)
 
 
     #
@@ -711,7 +721,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     z2         = grad_H_xstar' * (tempM\grad_H_xstar)
     z3         = sqrt(abs(z1/z2))
     kappa      = Kstar^3/z3
-    prefactor  = z3 * norm(grad_H_xstar)^2 * (options[:damping]/sqrt(2*pi*options[:temperature]) )
+    prefactor  = z3 * (grad_H_xstar'*S*grad_H_xstar) * (options[:damping]/sqrt(2*pi*options[:temperature]) )
     energydiff = H_xstar - xbar[:H_xbar]
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     caputil    = 100.0 * options[:constr_limit_scale] * sqrt(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j]))/sqrt(flowmax)
@@ -787,7 +797,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     # KKT - Primal feasibility
     #
     # @NLconstraint(em, baseMVA*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax) == 0)
-    @NLconstraint(em, baseMVA*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax) == 0)
+    @NLconstraint(em, baseMVA*(flowmax - (Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])))) == 0)
 
 
     #
