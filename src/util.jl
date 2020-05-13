@@ -540,13 +540,7 @@ function get_dispatch_point(opfdata::OPFData, options::Dict, adjustments::Dict=D
     """
     M = acopf_model(opfdata, options, adjustments)
     M = acopf_solve(M, opfdata)
-    x_dispatch = MathProgBase.getsolution(M.m.internalModel)
-    dispatch_point = Dict()
-    dispatch_point[:Pg] = deepcopy(x_dispatch[[x.col for x in getindex(M.m, :Pg)]])
-    dispatch_point[:Qg] = deepcopy(x_dispatch[[x.col for x in getindex(M.m, :Qg)]])
-    dispatch_point[:Vm] = deepcopy(x_dispatch[[x.col for x in getindex(M.m, :Vm)]])
-    dispatch_point[:Va] = deepcopy(x_dispatch[[x.col for x in getindex(M.m, :Va)]])
-
+    dispatch_point = get_point(M)
     return dispatch_point, M
 end
 
@@ -563,6 +557,16 @@ function get_operating_point(dispatch_point::Dict, opfdata::OPFData, options::Di
     operating_point[:Vm] = deepcopy(getvalue(M.m[:Vm]))
     operating_point[:Va] = deepcopy(getvalue(M.m[:Va]))
     return operating_point, M
+end
+
+function get_point(M::OPFModel)
+  sol = MathProgBase.getsolution(M.m.internalModel)
+  point = Dict()
+  point[:Pg] = deepcopy(sol[[x.col for x in getindex(M.m, :Pg)]])
+  point[:Qg] = deepcopy(sol[[x.col for x in getindex(M.m, :Qg)]])
+  point[:Vm] = deepcopy(sol[[x.col for x in getindex(M.m, :Vm)]])
+  point[:Va] = deepcopy(sol[[x.col for x in getindex(M.m, :Va)]])
+  return point
 end
 
 ## -----------------------------------------------------------------------------
