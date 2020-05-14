@@ -26,6 +26,9 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
 
         ## solve
         status = solve(opfmodel)
+        println("\nITER   = $(iter) ")
+        println("STATUS = $(string(status))\n")
+        println()
         if status != :Optimal
             break
         end
@@ -188,7 +191,11 @@ end
 function write_optimal_values(file::String, optimal_values::Dict)
     for k in keys(optimal_values)
         open("$(file)$(string(k)).csv", "w") do io
-            writedlm(io, optimal_values[k])
+            if isa(optimal_values[k], String)
+                write(io, optimal_values[k], '\n')
+            else
+                writedlm(io, optimal_values[k])
+            end
         end
     end
 end
