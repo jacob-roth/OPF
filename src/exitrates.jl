@@ -602,6 +602,29 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     # The main constraint written in log form
     #
     #@NLconstraint(opfmodel, denom >= 0)
+    if options[:psd_constraint]
+        #--------------------------------------------------------------------------------
+        # Enforcing minimization of lower-level problem is equivalent to enforcing 
+        # that the Hessian of its Lagrangian at the exit point is positive definite.
+        #
+        # ASSUMING that Hessian of the energy function at x_bar is positive definite,
+        # this can be shown to be equivalent to enforcing the spectral radius of the matrix
+        # X = KDT, where T is as defined above,
+        # to be less than 1.
+        #
+        # However, even though X is a small kxk matrix where k = 2 or 3,
+        # it is nonsymmetric and there is no easy way to enforce this spectral constraint.
+        #
+        # There are 2 strategies:
+        #       (a) Implement a relaxed version of the constraint: tr(X) = sum of eigenvalues < k
+        #       (b) Try and decompose hess h = LDL^T, where D > 0. However, this might not always be possible.
+        #           In this case, we can replace the condition on X with that on (K*sqrt(D)*T*sqrt(D))
+        #           which is symmetric and hence we can use Sylvester’s criterion of principal minors > 0.
+        #
+        # We adopt strategy (a) for simplicity
+        #--------------------------------------------------------------------------------
+        @NLconstraint(opfmodel, sum(Kstar*D[m,m]*T[m,m] for m=1:ncol) <= ncol)
+    end
     @NLconstraint(opfmodel,
                     1.5log(Kstar) + log(norm_squared_grad_h_weighted_S) -
                     (Kstar*xstar_minus_xbar_times_grad_h/2options[:temperature]) -
@@ -738,7 +761,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     prefactor  = z3 * sum(S.*grad_H_xstar.^2) * (options[:damping]/sqrt(2*pi*options[:temperature]) )
     energydiff = H_xstar - xbar[:H_xbar]
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
-    caputil    = 100.0 * options[:constr_limit_scale] * sqrt(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j]))/sqrt(flowmax)
+    caputil    = 100.0 * options[:constr_limit_scale] * sqrt(abs(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j])))/sqrt(flowmax)
     if isnan(kappa)
         (options[:print_level] >= 1) && println("warning: unable to compute EXACT exit rate for line ", l, " = (", i, ",", j, "). kappa = ", kappa, " (NaN)")
         return nothing
@@ -973,7 +996,11 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
                                 xstar_minus_xbar_times_grad_h -
                                     (L_times_xstar_minus_xbar' * (X \ L_times_xstar_minus_xbar))
                                )
-    if kappa < 0 || isnan(kappa)
+    if kappa < 0
+        (options[:print_level] >= 1) && println("warning: forcing kappa > 0 for line ", l, " = (", i, ",", j, "). kappa = ", kappa)
+        kappa = abs(kappa)
+    end
+    if isnan(kappa)
         (options[:print_level] >= 1) && println("warning: unable to compute KKT exit rate for line ", l, " = (", i, ",", j, "). kappa = ", kappa, " (negative)")
         return nothing
     end
@@ -981,7 +1008,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     energydiff = Kstar * xstar_minus_xbar_times_grad_h/2.0
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     ## line capacity utilization
-    caputil    = 100.0 * options[:constr_limit_scale] * sqrt(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j]))/sqrt(flowmax)
+    caputil    = 100.0 * options[:constr_limit_scale] * sqrt(abs(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j])))/sqrt(flowmax)
 
     if prefactor < 0 || isnan(prefactor)
         (options[:print_level] >= 1) && println("warning: unable to compute KKT exit rate for line ", l, " = (", i, ",", j, "). prefactor = ", prefactor, " (negative)")
