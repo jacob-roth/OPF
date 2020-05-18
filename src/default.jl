@@ -30,7 +30,8 @@ function DefaultOptions()
   D[:ratelimit]      = 10.0    ## max upper bound on the transition rates
   D[:iterlim]        = Inf     ## max number of rounds of adding constraints
   D[:VOLL]           = Inf     ## Value of lost load (can be Inf)
-  D[:psd_constraint] = true    ## Enforce convexity of KKT subproblem
+  D[:psd_constraint] = false   ## Enforce convexity of KKT subproblem
+  D[:high_temp_adj]  = false   ## High temperature adjustment to prefactor
   return D
 end
 

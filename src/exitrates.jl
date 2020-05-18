@@ -625,13 +625,23 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
         #--------------------------------------------------------------------------------
         @NLconstraint(opfmodel, sum(Kstar*D[m,m]*T[m,m] for m=1:ncol) <= ncol)
     end
-    @NLconstraint(opfmodel,
-                    1.5log(Kstar) + log(norm_squared_grad_h_weighted_S) -
-                    (Kstar*xstar_minus_xbar_times_grad_h/2options[:temperature]) -
-                    0.5log(sqrt(denom^2 + 1.0e-16)) -
-                    log(options[:ratelimit]*sqrt(2*pi*options[:temperature])/options[:damping])
-                    <= 0
-                )
+    if options[:high_temp_adj]
+        @NLconstraint(opfmodel,
+                        log(((Kstar^1.5)*(norm_squared_grad_h_weighted_S)/(denom^2 + 1.0e-16)^0.25) +
+                            (2options[:temperature]/(Kstar*xstar_minus_xbar_times_grad_h))) -
+                        (Kstar*xstar_minus_xbar_times_grad_h/2options[:temperature]) -
+                        log(options[:ratelimit]*sqrt(2*pi*options[:temperature])/options[:damping])
+                        <= 0
+                    )
+    else
+        @NLconstraint(opfmodel,
+                        1.5log(Kstar) + log(norm_squared_grad_h_weighted_S) -
+                        (Kstar*xstar_minus_xbar_times_grad_h/2options[:temperature]) -
+                        0.5log(sqrt(denom^2 + 1.0e-16)) -
+                        log(options[:ratelimit]*sqrt(2*pi*options[:temperature])/options[:damping])
+                        <= 0
+                    )
+    end
 end
 
 ## -----------------------------------------------------------------------------
@@ -760,6 +770,9 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     kappa      = Kstar^3/z3
     prefactor  = z3 * sum(S.*grad_H_xstar.^2) * (options[:damping]/sqrt(2*pi*options[:temperature]) )
     energydiff = H_xstar - xbar[:H_xbar]
+    if options[:high_temp_adj]
+        prefactor += options[:temperature]/energydiff
+    end
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     caputil    = 100.0 * options[:constr_limit_scale] * sqrt(abs(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j])))/sqrt(flowmax)
     if isnan(kappa)
@@ -1006,6 +1019,9 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     end
     prefactor  = Kstar^(1.5) * sum(S.*grad_h.^2) * (options[:damping]/sqrt(2*pi*options[:temperature]) ) / sqrt(kappa)
     energydiff = Kstar * xstar_minus_xbar_times_grad_h/2.0
+    if options[:high_temp_adj]
+        prefactor += options[:temperature]/energydiff
+    end
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     ## line capacity utilization
     caputil    = 100.0 * options[:constr_limit_scale] * sqrt(abs(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j])))/sqrt(flowmax)
