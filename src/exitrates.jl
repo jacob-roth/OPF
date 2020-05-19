@@ -38,6 +38,8 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
 
         ## loop over lines and check exit rates
         updated = false
+        pl = deepcopy(options[:print_level])
+        options[:print_level] = 0
         for l in 1:length(lines)
             ## Skip if we have already checked this line
             (l in lines_with_added_rate_constraints) && continue
@@ -55,9 +57,10 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
             ## add exit rate constraint
             updated = true
             push!(lines_with_added_rate_constraints, l)
+            println("adding constraint for line $l")
             add_exitrate_constraint!(l, exit_point, opfmodel, opfmodeldata, options)
         end
-
+        options[:print_level] = pl
 
         ## Fix load shedding and change objective to minimizing cost
         if !updated
@@ -83,6 +86,8 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
     rates = zeros(length(lines))
     prefactors = zeros(length(lines))
     expterms = zeros(length(lines))
+    pl = deepcopy(options[:print_level])
+    options[:print_level] = 0
     for l in eachindex(lines)
         exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
         (exit_point == nothing) && continue
@@ -97,6 +102,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
             @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, exitrate2, abs(log(exitrate/exitrate2)))
         end
     end
+    options[:print_level] = pl
 
     other[:rates] = rates
     other[:prefactors] = prefactors
@@ -604,7 +610,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     #@NLconstraint(opfmodel, denom >= 0)
     if options[:psd_constraint]
         #--------------------------------------------------------------------------------
-        # Enforcing minimization of lower-level problem is equivalent to enforcing 
+        # Enforcing minimization of lower-level problem is equivalent to enforcing
         # that the Hessian of its Lagrangian at the exit point is positive definite.
         #
         # ASSUMING that Hessian of the energy function at x_bar is positive definite,

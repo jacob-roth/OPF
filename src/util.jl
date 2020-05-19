@@ -399,6 +399,9 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
   YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA;
                                                       lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap)
   Y = computeAdmittanceMatrix(opfdata, options)
+  if options[:lossless] == true
+    Y = imag.(Y)
+  end
 
   # helpful quantities
   nonLoadBuses = findall(!isempty, BusGeners)
