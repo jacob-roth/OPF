@@ -25,6 +25,7 @@ function DefaultOptions()
   D[:zip]            = zip0
   D[:sol]            = sol0
   D[:tol]            = 1e-9
+  D[:pw_angle_limits]= false   ## pairwise angle bound limits
   return D
 end
 
