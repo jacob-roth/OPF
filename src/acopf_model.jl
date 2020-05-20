@@ -10,7 +10,7 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   @variable(opfmodel, opfmodeldata[:generators][i].Pmin <= Pg[i=1:ngen] <= opfmodeldata[:generators][i].Pmax)
   @variable(opfmodel, opfmodeldata[:generators][i].Qmin <= Qg[i=1:ngen] <= opfmodeldata[:generators][i].Qmax)
   @variable(opfmodel, opfmodeldata[:buses][i].Vmin <= Vm[i=1:nbus] <= opfmodeldata[:buses][i].Vmax)
-  @variable(opfmodel, Va[1:nbus])
+  @variable(opfmodel, -pi <= Va[1:nbus] <= pi)
   @variable(opfmodel, 0 <= Ps[i=1:nbus] <= opfmodeldata[:buses][i].Pd) # real power shed
   @variable(opfmodel, 0 <= Qs[i=1:nbus] <= opfmodeldata[:buses][i].Qd) # reactive power shed
 
