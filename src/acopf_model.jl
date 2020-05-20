@@ -17,14 +17,14 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   if options[:pw_angle_limits] == true
     for line in opfmodeldata[:lines]
       angmin, angmax = line.angmin, line.angmax
-      if angmin != -360.0 && angmin != 0.0 && angmin != 360.0
+      if angmin ∉ [-360.0, 0.0, 360.0]
         println("adding pairwise min-angle constraint (angmin = $angmin)")
-        @constraint(opfmodel, angmin * pi / 180 <= Va[from_idx] - Va[to_idx])
+        @constraint(opfmodel, angmin * pi / 180 <= Va[line.from] - Va[line.to])
       end
-      if angmax != 360.0 && angmax != 0.0 && angmax != -360.0
+      if angmax ∉ [-360.0, 0.0, 360.0]
         println("adding pairwise max-angle constraint (angmax = $angmax)")
-        @constraint(opfmodel, Va[from_idx] - Va[to_idx] <= angmax * pi / 180)
-      end
+        @constraint(opfmodel, Va[line.from] - Va[line.to] <= angmax * pi / 180)
+     end
     end
   end
 
