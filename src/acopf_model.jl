@@ -14,9 +14,28 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   @variable(opfmodel, 0 <= Ps[i=1:nbus] <= opfmodeldata[:buses][i].Pd) # real power shed
   @variable(opfmodel, 0 <= Qs[i=1:nbus] <= opfmodeldata[:buses][i].Qd) # reactive power shed
 
+  if options[:pw_angle_limits] == true
+    for line in opfmodeldata[:lines]
+      angmin, angmax = line.angmin, line.angmax
+      if angmin != -360.0 && angmin != 0.0 && angmin != 360.0
+        println("adding pairwise min-angle constraint (angmin = $angmin)")
+        @constraint(opfmodel, angmin * pi / 180 <= Va[from_idx] - Va[to_idx])
+      end
+      if angmax != 360.0 && angmax != 0.0 && angmax != -360.0
+        println("adding pairwise max-angle constraint (angmax = $angmax)")
+        @constraint(opfmodel, Va[from_idx] - Va[to_idx] <= angmax * pi / 180)
+      end
+    end
+  end
+
   ## fix the voltage angle at the reference bus
-  setlowerbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
-  setupperbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
+  if options[:slack0] == true
+    setlowerbound(Va[opfdata.bus_ref], 0.0)
+    setupperbound(Va[opfdata.bus_ref], 0.0)
+  else
+    setlowerbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
+    setupperbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
+  end
 
   ## objective
   if options[:shed_load]

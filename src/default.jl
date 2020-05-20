@@ -32,6 +32,8 @@ function DefaultOptions()
   D[:VOLL]           = Inf     ## Value of lost load (can be Inf)
   D[:psd_constraint] = false   ## Enforce convexity of KKT subproblem
   D[:high_temp_adj]  = false   ## High temperature adjustment to prefactor
+  D[:slack0]         = true    ## fix slack reference angle to be zero
+  D[:pw_angle_limits]= false   ## pairwise angle difference constraints
   return D
 end
 
