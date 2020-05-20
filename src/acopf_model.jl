@@ -15,7 +15,6 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   if options[:pw_angle_limits] == true
     for line in opfmodeldata[:lines]
       angmin, angmax = line.angmin, line.angmax
-      println(angmin, " | ", angmax)
       if angmin ∉ [-360.0, 0.0, 360.0]
         println("adding pairwise min-angle constraint (angmin = $angmin)")
         @constraint(opfmodel, angmin * pi / 180 <= Va[line.from] - Va[line.to])
@@ -28,8 +27,13 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   end
 
   ## fix the voltage angle at the reference bus
-  setlowerbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
-  setupperbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
+  if options[:slack0] == true
+    setlowerbound(Va[opfdata.bus_ref], 0.0)
+    setupperbound(Va[opfdata.bus_ref], 0.0)
+  else
+    setlowerbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
+    setupperbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
+  end
 
   ## objective
   if options[:feasibility] == true
