@@ -267,7 +267,7 @@ version = "0.8.0"
 
 [[MPCCases]]
 deps = ["DelimitedFiles", "MAT", "SparseArrays", "StructArrays"]
-git-tree-sha1 = "9f03f0326f7c22f7032a04206da39b4672d53d6c"
+git-tree-sha1 = "ac3ce9790e71626b6d2b14990d81e9c92fdd8714"
 repo-rev = "master"
 repo-url = "https://github.com/jacob-roth/MPCCases.git"
 uuid = "18da711e-460b-11e9-09d1-c9dc5c0ea288"
