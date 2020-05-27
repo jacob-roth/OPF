@@ -244,9 +244,17 @@ function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, 
         else
           Yabs2 = abs2(line.r / (line.r^2 + line.x^2) - im * (line.x / (line.r^2 + line.x^2)))
         end
+        if options[:remove_tap] == true
+          t   = (line.ratio == 0.0 ? 1.0 : line.ratio) * exp(im * line.angle)
+          Tik = abs(t)
+          φik = angle(t)
+        else
+          Tik = 1.0
+          φik = 0.0
+        end
         ## NOTE: current from Frank & Rebennack OPF primer eq 5.11; turns/tap ratios are not accounted for
         # F_l = @NLexpression(opfmodel, current2, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)) - flowmax/Yabs2)
-        F_l = @NLexpression(opfmodel, current2, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t))*Yabs2 - flowmax)
+        F_l = @NLexpression(opfmodel, current2, ((Vm_f/Tik)^2 + Vm_t^2 - 2 * (Vm_f/Tik) * Vm_t * cos((Va_f-φik) - Va_t))*Yabs2 - flowmax)
         @NLconstraint(opfmodel, current2 <= 0)
 
         if c == 0

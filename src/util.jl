@@ -593,12 +593,20 @@ function get_flowmag2s(VM::Array{Float64,1}, VA::Array{Float64,1}, Y::AbstractAr
             ## NOTE: current from Frank & Rebennack OPF primer: eq 5.11 where turns/tap ratios are accounted for in `Y`
             Vm_f = VM[busIdx[f]]; Va_f = VA[busIdx[f]]
             Vm_t = VM[busIdx[t]]; Va_t = VA[busIdx[t]]
-            Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
-            current2 = Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)
+            if options[:remove_tap] == true
+              t   = (line.ratio == 0.0 ? 1.0 : line.ratio) * exp(im * line.angle)
+              Tik = abs(t)
+              φik = angle(t)
+            else
+              Tik = 1.0
+              φik = 0.0
+            end
+            current2 = (Vm_f/Tik)^2 + Vm_t^2 - 2 * (Vm_f/Tik) * Vm_t * cos((Va_f-φik) - Va_t)
             if mtd == :Yl
               Yl = line.r / (line.r^2 + line.x^2) - im * (line.x / (line.r^2 + line.x^2))
               current2 *= abs2(Yl)
             else
+              Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
               current2 *= Yabs2
             end
             current2s[l] = abs.(current2)
