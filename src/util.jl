@@ -14,10 +14,14 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
     Vm0 = warm_point[:Vm]
     Va0 = warm_point[:Va]
   end
+  Y = computeAdmittanceMatrix(opfdata, options)
   setvalue(getindex(opfmodel, :Pg), Pg0)
   setvalue(getindex(opfmodel, :Qg), Qg0)
   setvalue(getindex(opfmodel, :Vm), Vm0)
   setvalue(getindex(opfmodel, :Va), Va0)
+  # lc = get_flowmag2s(Vm0, Va0, Y, opfdata, options)
+  # setvalue(getindex(opfmodel, :lc), lc.flowmag2)
+
   status = :IpoptInit
   status = solve(opfmodel)
 
@@ -52,7 +56,6 @@ function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, co
     G     = filter(x -> x ∉ R, findall(.!isempty.(opfdata.BusGenerators)))
     L     = findall(isempty.(opfdata.BusGenerators))
     not_R = deleteat!(collect(1:nbus), R)
-
     #
     # initial point - needed especially for pegase cases
     #
@@ -572,7 +575,7 @@ end
 ## -----------------------------------------------------------------------------
 ## helpers: computation
 ## -----------------------------------------------------------------------------
-function get_flowmag2s(VM::Array{Float64,1}, VA::Array{Float64,1}, Y::AbstractArray, opfdata::OPFData, options::Dict, c::Bool=false)
+function get_flowmag2s(VM::Array{Float64,1}, VA::Array{Float64,1}, Y::AbstractArray, opfdata::OPFData, options::Dict, mtd::Symbol=:Yl, c::Bool=false)
     lines = opfdata.lines; busIdx = opfdata.BusIdx; nline = length(lines)
     if c == true
       nline_orig = nline + 1
@@ -592,7 +595,12 @@ function get_flowmag2s(VM::Array{Float64,1}, VA::Array{Float64,1}, Y::AbstractAr
             Vm_t = VM[busIdx[t]]; Va_t = VA[busIdx[t]]
             Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
             current2 = Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)
-            current2 *= Yabs2
+            if mtd == :Yl
+              Yl = line.r / (line.r^2 + line.x^2) - im * (line.x / (line.r^2 + line.x^2))
+              current2 *= abs2(Yl)
+            else
+              current2 *= Yabs2
+            end
             current2s[l] = abs.(current2)
         end
     end
@@ -797,12 +805,21 @@ function check_feasibility(check_point::Dict, opfdata::OPFData, options::Dict, f
     VM_lo = VM .>= Vm_lo .- feas_tol
     VA_hi = VA .<= Va_hi .+ feas_tol
     VA_lo = VA .>= Va_lo .- feas_tol
-    flows = flowmag2s .<= flowmax .+ feas_tol
+    flowmax_adj = deepcopy(flowmax)
+    flowmax_adj[flowmax_adj .== 0] .= Inf
+    flows = flowmag2s.flowmag2 .<= flowmax_adj .+ feas_tol
     feas *= prod(PG_hi); feas *= prod(PG_lo)
     feas *= prod(QG_hi); feas *= prod(QG_lo)
     feas *= prod(VM_hi); feas *= prod(VM_lo)
     feas *= prod(VA_hi); feas *= prod(VA_lo)
     feas *= prod(flows)
+
+    # curr2 = flowmag2s.flowmag2
+    # offend = findall(flows .!= 1)
+    # minimum(curr2[offend] .- flowmax_adj[offend])
+    # x = hcat(curr2[offend], flowmax_adj[offend], 1.0./opfdata.lines.x[offend])
+
+
 
     ## infeasibility results
     infeas_dict = Dict()
