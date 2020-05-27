@@ -14,11 +14,11 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
     Vm0 = warm_point[:Vm]
     Va0 = warm_point[:Va]
   end
-  Y = computeAdmittanceMatrix(opfdata, options)
   setvalue(getindex(opfmodel, :Pg), Pg0)
   setvalue(getindex(opfmodel, :Qg), Qg0)
   setvalue(getindex(opfmodel, :Vm), Vm0)
   setvalue(getindex(opfmodel, :Va), Va0)
+  # Y = computeAdmittanceMatrix(opfdata, options)
   # lc = get_flowmag2s(Vm0, Va0, Y, opfdata, options)
   # setvalue(getindex(opfmodel, :lc), lc.flowmag2)
 
