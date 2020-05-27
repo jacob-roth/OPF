@@ -62,7 +62,7 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   for l in 1:nline
     if options[:current_rating]
       ## current
-      add_line_current_constraint!(opfmodel, opfmodeldata, l)
+      add_line_current_constraint!(opfmodel, opfmodeldata, options, l)
     else
       ## apparent power (to & from)
       add_line_power_constraint!(opfmodel, opfmodeldata, l)

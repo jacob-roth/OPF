@@ -186,7 +186,7 @@ function add_q_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
   JuMP.registerobject(opfmodel, Symbol(Qb), Q_b, Qb)
 end
 
-function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, l::Int64, c::Int64=0)
+function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, options::Dict, l::Int64, c::Int64=0)
     Pg0        = opfmodel[:Pg]
     Qg0        = opfmodel[:Qg]
     Vm0        = opfmodel[:Vm]
@@ -239,7 +239,11 @@ function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, 
         Vm_f = Vm[f_idx]; Va_f = Va[f_idx]
         Vm_t = Vm[t_idx]; Va_t = Va[t_idx]
         # Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
-        Yabs2 = abs2(line.r / (line.r^2 + line.x^2) - im * (line.x / (line.r^2 + line.x^2)))
+        if options[:lossless] == true
+          Yabs2 = abs2(1.0 / line.x)
+        else
+          Yabs2 = abs2(line.r / (line.r^2 + line.x^2) - im * (line.x / (line.r^2 + line.x^2)))
+        end
         ## NOTE: current from Frank & Rebennack OPF primer eq 5.11; turns/tap ratios are not accounted for
         # F_l = @NLexpression(opfmodel, current2, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)) - flowmax/Yabs2)
         F_l = @NLexpression(opfmodel, current2, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t))*Yabs2 - flowmax)
