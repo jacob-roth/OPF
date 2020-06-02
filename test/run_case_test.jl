@@ -21,8 +21,14 @@ include("../src/OPF.jl") # stand-in for "using OPF"; remember to comment out the
 ## test cases
 ## -----------------------------------------------------------------------------
 
+# case_name = "case118"
+# case_path = cases_path
 case_name = "case1354pegase"
-case_path = cases_path * "1354_id/"
+# case_path = cases_path * "1354_id/"
+# case_path = cases_path * "1354_structjump/"
+case_path = cases_path * "1354_pglib/"
+# case_name = "case9241pegase"
+# case_path = cases_path * "9241_id/"
 # case_path = cases_path * "1354_structjump/"
 # case_path = cases_path * "1354_pglib/"
 
@@ -47,6 +53,19 @@ opfmodeldata = get_opfmodeldata(opfdata,options)
 opfmodel = acopf_model(opfdata, options)
 opfmodel_acopf = acopf_solve(opfmodel, opfdata)
 
+## 118bus n-1
+options[:current_rating] = true
+options[:ramp_pct] = 0.01
+opfdata = load_case(case_name, case_path; other=false);
+casedata = CaseData(opfdata, get_phys(opfdata.buses, Dg=1.0, Mg=1.0, Dl=1.0, Dv=1.0));
+opfmodeldata = get_opfmodeldata(opfdata,options)
+contingencies = get_all_contingencies(opfdata, options)
+scopfmodel = scacopf_model(opfdata, options, DefaultAdjustments(), contingencies)
+scopfmodel_acopf = scacopf_solve(scopfmodel, opfdata, options, contingencies)
+
+
+
+
 options[:current_rating] = true
 options[:lossless] = true
 opfdata = load_case(case_name, case_path; other=false);
@@ -57,20 +76,24 @@ opfmodel_acopf = acopf_solve(opfmodel, opfdata)
 
 options[:current_rating] = true
 options[:lossless] = true
-options[:remove_Bshunt] = true
-options[:remove_tap] = true
+options[:remove_Bshunt] = false
+options[:remove_tap] = false
 opfdata = load_case(case_name, case_path; other=false);
 casedata = CaseData(opfdata, get_phys(opfdata.buses, Dg=1.0, Mg=1.0, Dl=1.0, Dv=1.0));
 opfmodeldata = get_opfmodeldata(opfdata,options)
 opfmodel = acopf_model(opfdata, options)
 opfmodel_acopf = acopf_solve(opfmodel, opfdata)
 
-
-
-
-
-
-
+pg = zeros(length(opfdata.buses))
+qg = zeros(length(opfdata.buses))
+for i in eachindex(opfdata.generators)
+    g = opfdata.generators[i]
+    pg[g.bus] = g.Pg
+    qg[g.bus] = g.Qg
+end
+pnet = -(opfdata.buses.Pd./100 + pg)
+qnet = -(opfdata.buses.Qd./100 + qg)
+rp,rq = PFE(VM, VA, Y, pnet, qnet)
 
 
 

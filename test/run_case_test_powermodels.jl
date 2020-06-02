@@ -9,6 +9,7 @@ using DelimitedFiles
 ## test cases
 ## -----------------------------------------------------------------------------
 datapath = "/Users/jakeroth/Desktop/opensource/pglib-opf/pglib_opf_case1354_pegase.m"
+datapath = "/home/jroth/Projects/pglib-opf/pglib_opf_case9241_pegase.m"
 
 ## -----------------------------------------------------------------------------
 ## solve
@@ -132,5 +133,6 @@ end
 writedlm("curr_fr_2.csv", curr_fr_2)
 writedlm("curr_to_2.csv", curr_to_2)
 Y = Matrix(calc_admittance_matrix(network_data).matrix)
+ev = eigvals(imag.(Y))
 writedlm("Gbus.csv", real.(Y))
 writedlm("Bbus.csv", imag.(Y))
