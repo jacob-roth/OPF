@@ -26,7 +26,9 @@ function DefaultOptions()
   D[:sol]            = sol0
   D[:tol]            = 1e-9
   D[:pw_angle_limits]= false   ## pairwise angle bound limits
-  D[:slack0]        = true
+  D[:slack0]         = true
+  D[:ramp_pct]       = 0.1     ## |Pg - Pg_contingency| <= ramp_pct * Pg_max
+  D[:ctg_feas]       = true    ## contingency objective: true = 0 or false = sum(Pg cost)
   return D
 end
 

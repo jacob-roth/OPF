@@ -334,3 +334,55 @@ end
 function add_sc_constraint!(opfmodel::JuMP.Model, sc_data::Dict)
   @NLexpression(opfmodel, 1)
 end
+
+
+# function pwr(Vm, Va, opfmd::Dict, options::Dict, l::Int)
+#   lines  = opfmd[:lines]
+#   busIdx = opfmd[:BusIdx]
+#   YffR   = opfmd[:YffR];
+#   YffI   = opfmd[:YffI];
+#   YttR   = opfmd[:YttR];
+#   YttI   = opfmd[:YttI];
+#   YftR   = opfmd[:YftR];
+#   YftI   = opfmd[:YftI];
+#   YtfR   = opfmd[:YtfR];
+#   YtfI   = opfmd[:YtfI];
+#   YshR   = opfmd[:YshR];
+#   YshI   = opfmd[:YshI];
+#
+#   Yff_abs2=YffR[l]^2+YffI[l]^2; Yft_abs2=YftR[l]^2+YftI[l]^2
+#   Yre=YffR[l]*YftR[l]+YffI[l]*YftI[l]; Yim=-YffR[l]*YftI[l]+YffI[l]*YftR[l]
+#   sabs2 = Vm[busIdx[lines[l].from]]^2 *
+#             (
+#               Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
+#               + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+#             )
+#
+#   line = lines[l]
+#   if options[:lossless] == true
+#     Yabs2 = (1.0 / line.x)^2
+#   else
+#     Yabs2 = abs2(line.r / (line.r^2 + line.x^2) - im * (line.x / (line.r^2 + line.x^2)))
+#   end
+#   if options[:remove_tap] == true
+#     t   = (line.ratio == 0.0 ? 1.0 : line.ratio) * exp(im * line.angle)
+#     Tik = abs(t)
+#     φik = angle(t)
+#   else
+#     Tik = 1.0
+#     φik = 0.0
+#   end
+#   curr2 = Yabs2 * ((Vm[busIdx[lines[l].from]]/Tik)^2 + Vm[busIdx[lines[l].to]]^2
+#           - 2*((Vm[busIdx[lines[l].from]]/Tik)*Vm[busIdx[lines[l].to]]*(cos((Va[busIdx[lines[l].from]] - φik) - Va[busIdx[lines[l].to]]))))
+#   iv2 = curr2 * Vm[busIdx[lines[l].from]]^2
+#   return sabs2, curr2, iv2
+# end
+# pwrs = zeros(length(lines))
+# crrs = zeros(length(lines))
+# iv2s = zeros(length(lines))
+# for i in eachindex(lines)
+#   s,c,iv = pwr(Vm, Va, opfmd, case_options, i)
+#   pwrs[i] = s
+#   crrs[i] = c
+#   iv2s[i] = iv
+# end

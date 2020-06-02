@@ -15,7 +15,7 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
     m = M.m
 
     ## objective expression of each contingency
-    obj_cs = Array{JuMP.NonlinearExpression,1}(undef, length(keys(contingencies)))
+    obj_cs = Array{Union{Float64,JuMP.NonlinearExpression},1}(undef, length(keys(contingencies)))
 
     ## add contingency security constraints
     if !isempty(contingencies)
@@ -39,8 +39,8 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
                 ## bound
                 @constraint(m, opfmodeldata[:generators].Pmin[i] <= Pg_[i] <= opfmodeldata[:generators].Pmax[i])
                 ## ramp
-                @constraint(m, options[:rampdn] * Pg[i] - Pg_[i] <= 0.0) #@constraint(m, 0.5 * Pg[i] - Pg_[i] <= 0.0)
-                @constraint(m, Pg_[i] - options[:rampup] * Pg[i] <= 0.0) #@constraint(m, Pg_[i] - 2.0 * Pg[i] <= 0.0)
+                @constraint(m, Pg[i] - Pg_[i] <= options[:ramp_pct] * opfmodeldata[:generators].Pmax[i])
+                @constraint(m, Pg_[i] - Pg[i] <= options[:ramp_pct] * opfmodeldata[:generators].Pmax[i])
             end
             for i in 1:ngen
                 ## bound
@@ -99,8 +99,12 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
             #
             # secondary objective
             #
-            obj_c = @NLexpression(m, sum(opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2] * (opfmodeldata[:baseMVA] * Pg_[i]) ^ 2 + opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1] * (opfmodeldata[:baseMVA] * Pg_[i]) +
-                    opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n] for i=1:ngen))
+            if options[:ctg_feas] == true
+                obj_c = 0.0
+            else
+                obj_c = @NLexpression(m, sum(opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2] * (opfmodeldata[:baseMVA] * Pg_[i]) ^ 2 + opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1] * (opfmodeldata[:baseMVA] * Pg_[i]) +
+                        opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n] for i=1:ngen))
+            end
             c_idx = first(findall(c_id .== collect(keys(contingencies))))
             obj_cs[c_idx] = obj_c
 
@@ -123,7 +127,7 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
             for l in filter(x -> x != c_id, keys(contingencies))
                 if options[:current_rating]
                     ## current
-                    add_line_current_constraint!(m, c_opfmodeldata, l, c_id)
+                    add_line_current_constraint!(m, c_opfmodeldata, options, l, c_id)
                 else
                     ## apparent power (to & from)
                     add_line_power_constraint!(m, c_opfmodeldata, l, c_id)
