@@ -847,3 +847,52 @@ function check_feasibility(check_point::Dict, opfdata::OPFData, options::Dict, f
         return false, infeas_dict
     end
 end
+
+function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
+    solution = Dict()
+    NB = length(opfmodeldata[:buses])
+    solution[:Pg_full] = zeros(length(opfmodeldata[:buses]))
+    solution[:Qg_full] = zeros(length(opfmodeldata[:buses]))
+    Pg = getvalue(getindex(opfmodel,:Pg))
+    Qg = getvalue(getindex(opfmodel,:Qg))
+    for x in enumerate(opfmodeldata[:generators])
+        g,gid = x[2],x[1]
+        idx = opfmodeldata[:BusIdx][g.bus]
+        solution[:Pg_full][idx] = Pg[gid]
+        solution[:Qg_full][idx] = Qg[gid]
+    end
+    solution[:Pg] = getvalue(getindex(opfmodel,:Pg))
+    solution[:Qg] = getvalue(getindex(opfmodel,:Qg))
+    solution[:Vm] = getvalue(getindex(opfmodel,:Vm))
+    solution[:Va] = getvalue(getindex(opfmodel,:Va))
+    solution[:Ps] = zeros(NB) # getvalue(getindex(opfmodel,:Ps))
+    solution[:Qs] = zeros(NB) # getvalue(getindex(opfmodel,:Qs))
+
+    # Get also power injections
+    BusGeners = opfmodeldata[:BusGenerators]
+    buses     = opfmodeldata[:buses]
+    baseMVA   = opfmodeldata[:baseMVA]
+    solution[:Pnet] = [reduce(+, solution[:Pg][g] for g in BusGeners[i]; init=0.0) - ((buses[i].Pd - solution[:Ps][i]) / baseMVA) for i in 1:length(buses)]
+    solution[:Qnet] = [reduce(+, solution[:Qg][g] for g in BusGeners[i]; init=0.0) - ((buses[i].Qd - solution[:Qs][i]) / baseMVA) for i in 1:length(buses)]
+
+    # Get also voltages in the reduced space
+    solution[:Vmr]  = getvalue(getindex(opfmodel,:Vm))
+    solution[:Var]  = getvalue(getindex(opfmodel,:Va))
+    for i in opfmodeldata[:nonLoadBuses][end:-1:1]
+        splice!(solution[:Vmr], i)
+    end
+    splice!(solution[:Var], opfmodeldata[:bus_ref])
+
+    return solution
+end
+function write_optimal_values(file::String, optimal_values::Dict)
+    for k in keys(optimal_values)
+        open("$(file)$(string(k)).csv", "w") do io
+            if isa(optimal_values[k], String)
+                write(io, optimal_values[k], '\n')
+            else
+                writedlm(io, optimal_values[k])
+            end
+        end
+    end
+end
