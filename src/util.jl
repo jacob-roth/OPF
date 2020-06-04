@@ -30,8 +30,7 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   end
   return opfmodel, status
 end
-
-function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind); end
+function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind, M.other); end
 
 function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
 
@@ -46,8 +45,7 @@ function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   end
   return opfmodel, status
 end
-
-function acpf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acpf_solve(M.m, opfdata)..., M.kind); end
+function acpf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acpf_solve(M.m, opfdata)..., M.kind, M.other); end
 
 function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, contingencies::Dict=Dict(), warm_point=false, current_rating_bool::Bool=true)
     options[:current_rating] = current_rating_bool
@@ -105,7 +103,7 @@ function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, co
     return opfmodel, status
 end
 
-function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies::Dict=Dict(), warm_point=false); return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies, warm_point)..., M.kind); end
+function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false); return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind, M.other); end
 
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)
@@ -155,22 +153,28 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
   nbus  = length(buses); nline = length(lines); ngen  = length(generators)
 
   # OUTPUTING
-  println("Objective value: ", getobjectivevalue(opfmodel), "USD/hr")
   VM=getvalue(getindex(opfmodel,:Vm)); VA=getvalue(getindex(opfmodel,:Va))
   PG=getvalue(getindex(opfmodel,:Pg)); QG=getvalue(getindex(opfmodel,:Qg))
+  PS=getvalue(getindex(opfmodel,:Ps)); QS=getvalue(getindex(opfmodel,:Qs))
   if kind == :S
     PD=getvalue(getindex(opfmodel,:Pd)); QD=getvalue(getindex(opfmodel,:Qd))
   end
+  println("Objective value: ", getobjectivevalue(opfmodel), ". Generation cost = ",
+    sum( generators[i].coeff[generators[i].n-2]*(baseMVA*PG[i])^2
+        +generators[i].coeff[generators[i].n-1]*(baseMVA*PG[i])
+        +generators[i].coeff[generators[i].n  ] for i=1:ngen), "USD/hr")
 
   println("============================= BUSES ==================================")
-  println("  BUS    Vm     Va    |   Pg (MW)    Qg(MVAr) ")   # |    P (MW)     Q (MVAr)")  #|         (load)   ")
+  println("  BUS    Vm     Va    |   Pg (MW)    Qg(MVAr)|   Ps (MW)    Qs(MVAr)  ")
 
-  println("                      |     (generation)      ")
+  println("                      |     (generation)     |     (shedding)     ")
   println("----------------------------------------------------------------------")
   for i in 1:nbus
-    @printf("%4d | %6.2f  %6.2f | %s  | \n",
+    @printf("%4d | %6.2f  %6.2f | %s  | %s     %s   |\n",
 	    buses[i].bus_i, VM[i], VA[i]*180/pi,
-	    (length(BusGeners[i])==0) ? "   --          --  " : @sprintf("%7.2f     %7.2f", baseMVA*PG[BusGeners[i][1]], baseMVA*QG[BusGeners[i][1]]))
+	    (length(BusGeners[i])==0) ? "   --          --  " : @sprintf("%7.2f     %7.2f", baseMVA*PG[BusGeners[i][1]], baseMVA*QG[BusGeners[i][1]]),
+      PS[i]<1e-3 ? "   --  " : @sprintf("%7.2f", PS[i]),
+      QS[i]<1e-3 ? "   --  " : @sprintf("%7.2f", QS[i]))
   end
   println("\n")
 
@@ -186,42 +190,10 @@ function acopf_outputAll(opfmodel::JuMP.Model, kind::Symbol, opfdata::MPCCases.O
 
   if nflowlim>0
     println("Number of lines with flow limits: ", nflowlim)
-    if kind == :D
-      optvec=zeros(2*nbus+2*ngen)
-    elseif kind == :S
-      optvec=zeros(4*nbus+2*ngen)
-    elseif kind == :SC
-      optvec=zeros(MathProgBase.numvar(opfmodel))
-    end
-    optvec[1:ngen]=PG
-    optvec[ngen+1:2*ngen]=QG
-    optvec[2*ngen+1:2*ngen+nbus]=VM
-    optvec[2*ngen+nbus+1:2*ngen+2*nbus]=VA
-    if kind == :S
-      optvec[2*ngen+2*nbus+1:2*ngen+3*nbus]=PD
-      optvec[2*ngen+3*nbus+1:2*ngen+4*nbus]=QD
-    end
-
     d = JuMP.NLPEvaluator(opfmodel)
     MathProgBase.initialize(d, [:Jac])
-    if kind == :D
-      if current_rating == true
-        consRhs = zeros(2*nbus+nflowlim)
-      else
-        consRhs = zeros(2*nbus+2*nflowlim)
-      end
-    elseif kind ==:S
-      if current_rating == true
-        consRhs = zeros(4*nbus+nflowlim)
-      else
-        consRhs = zeros(4*nbus+2*nflowlim)
-      end
-    elseif kind == :SC
-      consRhs = zeros(MathProgBase.numconstr(opfmodel))
-    end
-    MathProgBase.eval_g(d, consRhs, optvec)
-    # d = setup(opfmodel)
-    # c!(consRhs, optvec, model=d)
+    consRhs = zeros(MathProgBase.numconstr(opfmodel))
+    MathProgBase.eval_g(d, consRhs, internalmodel(opfmodel).inner.x)
 
     @printf("================ Lines within %d %% of flow capacity ===================\n", within)
     println("Line   From Bus    To Bus    At capacity")
@@ -488,6 +460,49 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
     opfmodeldata[:linindex_VMr] = deepcopy(linindex_VMr)
     opfmodeldata[:linindex_VAr] = deepcopy(linindex_VAr)
     return opfmodeldata
+end
+
+function get_opfmodeldata(casedata::CaseData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
+  opfmodeldata = get_opfmodeldata(casedata.opf, options, adjustments)
+  opfmodeldata[:S] = get_S(casedata)
+  return opfmodeldata
+end
+
+function get_S(casedata::CaseData)
+  nbus  = length(casedata.opf.buses)
+  ngen  = length(casedata.opf.generators)
+  nxr   = (nbus-1) + (nbus-ngen)
+  phys  = casedata.phys
+  slack = casedata.opf.bus_ref
+  gen   = casedata.opf.generators.bus
+  load  = filter!(x -> x ∉ gen, collect(1:nbus))
+  nload = length(load)
+
+  # idxs  = [filter!(x -> x ∉ slack, collect(1:nbus)); load]
+  # Sdiag = zeros(Float64, nxr)
+  # for e in enumerate(idxs)
+  #   i  = e[1]
+  #   ii = e[2]
+  #   if (ii in load) && (i <= nbus-1)
+  #     Sdiag[i] = 1.0 / phys[ii].D
+  #   elseif (ii in load) && (i > nbus-1)
+  #     Sdiag[i] = 1.0 / phys[ii].Dv
+  #   end
+  # end
+
+  idxs  = [load; filter!(x -> x ∉ slack, collect(1:nbus))]
+  Sdiag = zeros(Float64, nxr)
+  for e in enumerate(idxs)
+    i  = e[1]
+    ii = e[2]
+    if (ii in load) && (i <= nload)
+      Sdiag[i] = 1.0 / phys[ii].Dv
+    elseif (ii in load) && (i > nload)
+      Sdiag[i] = 1.0 / phys[ii].D
+    end
+  end
+
+  return Sdiag
 end
 
 function update_loadings!(opfdata::OPFData, options::Dict,
@@ -848,51 +863,51 @@ function check_feasibility(check_point::Dict, opfdata::OPFData, options::Dict, f
     end
 end
 
-function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
-    solution = Dict()
-    NB = length(opfmodeldata[:buses])
-    solution[:Pg_full] = zeros(length(opfmodeldata[:buses]))
-    solution[:Qg_full] = zeros(length(opfmodeldata[:buses]))
-    Pg = getvalue(getindex(opfmodel,:Pg))
-    Qg = getvalue(getindex(opfmodel,:Qg))
-    for x in enumerate(opfmodeldata[:generators])
-        g,gid = x[2],x[1]
-        idx = opfmodeldata[:BusIdx][g.bus]
-        solution[:Pg_full][idx] = Pg[gid]
-        solution[:Qg_full][idx] = Qg[gid]
-    end
-    solution[:Pg] = getvalue(getindex(opfmodel,:Pg))
-    solution[:Qg] = getvalue(getindex(opfmodel,:Qg))
-    solution[:Vm] = getvalue(getindex(opfmodel,:Vm))
-    solution[:Va] = getvalue(getindex(opfmodel,:Va))
-    solution[:Ps] = zeros(NB) # getvalue(getindex(opfmodel,:Ps))
-    solution[:Qs] = zeros(NB) # getvalue(getindex(opfmodel,:Qs))
-
-    # Get also power injections
-    BusGeners = opfmodeldata[:BusGenerators]
-    buses     = opfmodeldata[:buses]
-    baseMVA   = opfmodeldata[:baseMVA]
-    solution[:Pnet] = [reduce(+, solution[:Pg][g] for g in BusGeners[i]; init=0.0) - ((buses[i].Pd - solution[:Ps][i]) / baseMVA) for i in 1:length(buses)]
-    solution[:Qnet] = [reduce(+, solution[:Qg][g] for g in BusGeners[i]; init=0.0) - ((buses[i].Qd - solution[:Qs][i]) / baseMVA) for i in 1:length(buses)]
-
-    # Get also voltages in the reduced space
-    solution[:Vmr]  = getvalue(getindex(opfmodel,:Vm))
-    solution[:Var]  = getvalue(getindex(opfmodel,:Va))
-    for i in opfmodeldata[:nonLoadBuses][end:-1:1]
-        splice!(solution[:Vmr], i)
-    end
-    splice!(solution[:Var], opfmodeldata[:bus_ref])
-
-    return solution
-end
-function write_optimal_values(file::String, optimal_values::Dict)
-    for k in keys(optimal_values)
-        open("$(file)$(string(k)).csv", "w") do io
-            if isa(optimal_values[k], String)
-                write(io, optimal_values[k], '\n')
-            else
-                writedlm(io, optimal_values[k])
-            end
-        end
-    end
-end
+# function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
+#     solution = Dict()
+#     NB = length(opfmodeldata[:buses])
+#     solution[:Pg_full] = zeros(length(opfmodeldata[:buses]))
+#     solution[:Qg_full] = zeros(length(opfmodeldata[:buses]))
+#     Pg = getvalue(getindex(opfmodel,:Pg))
+#     Qg = getvalue(getindex(opfmodel,:Qg))
+#     for x in enumerate(opfmodeldata[:generators])
+#         g,gid = x[2],x[1]
+#         idx = opfmodeldata[:BusIdx][g.bus]
+#         solution[:Pg_full][idx] = Pg[gid]
+#         solution[:Qg_full][idx] = Qg[gid]
+#     end
+#     solution[:Pg] = getvalue(getindex(opfmodel,:Pg))
+#     solution[:Qg] = getvalue(getindex(opfmodel,:Qg))
+#     solution[:Vm] = getvalue(getindex(opfmodel,:Vm))
+#     solution[:Va] = getvalue(getindex(opfmodel,:Va))
+#     solution[:Ps] = zeros(NB) # getvalue(getindex(opfmodel,:Ps))
+#     solution[:Qs] = zeros(NB) # getvalue(getindex(opfmodel,:Qs))
+#
+#     # Get also power injections
+#     BusGeners = opfmodeldata[:BusGenerators]
+#     buses     = opfmodeldata[:buses]
+#     baseMVA   = opfmodeldata[:baseMVA]
+#     solution[:Pnet] = [reduce(+, solution[:Pg][g] for g in BusGeners[i]; init=0.0) - ((buses[i].Pd - solution[:Ps][i]) / baseMVA) for i in 1:length(buses)]
+#     solution[:Qnet] = [reduce(+, solution[:Qg][g] for g in BusGeners[i]; init=0.0) - ((buses[i].Qd - solution[:Qs][i]) / baseMVA) for i in 1:length(buses)]
+#
+#     # Get also voltages in the reduced space
+#     solution[:Vmr]  = getvalue(getindex(opfmodel,:Vm))
+#     solution[:Var]  = getvalue(getindex(opfmodel,:Va))
+#     for i in opfmodeldata[:nonLoadBuses][end:-1:1]
+#         splice!(solution[:Vmr], i)
+#     end
+#     splice!(solution[:Var], opfmodeldata[:bus_ref])
+#
+#     return solution
+# end
+# function write_optimal_values(file::String, optimal_values::Dict)
+#     for k in keys(optimal_values)
+#         open("$(file)$(string(k)).csv", "w") do io
+#             if isa(optimal_values[k], String)
+#                 write(io, optimal_values[k], '\n')
+#             else
+#                 writedlm(io, optimal_values[k])
+#             end
+#         end
+#     end
+# end

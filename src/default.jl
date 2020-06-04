@@ -25,8 +25,20 @@ function DefaultOptions()
   D[:zip]            = zip0
   D[:sol]            = sol0
   D[:tol]            = 1e-9
-  D[:pw_angle_limits]= false   ## pairwise angle bound limits
-  D[:slack0]         = true
+  #
+  # Options for enforcing transition rate limits
+  #
+  D[:damping]        = 1.0     ## damping coefficient
+  D[:temperature]    = 0.0001  ## temperature
+  D[:constr_limit_scale] = 1.2 ## line limits will be multiplied by this factor
+  D[:shed_load]      = true    ## shed load?
+  D[:ratelimit]      = 10.0    ## max upper bound on the transition rates
+  D[:iterlim]        = Inf     ## max number of rounds of adding constraints
+  D[:VOLL]           = Inf     ## Value of lost load (can be Inf)
+  D[:psd_constraint] = false   ## Enforce convexity of KKT subproblem
+  D[:high_temp_adj]  = false   ## High temperature adjustment to prefactor
+  D[:slack0]         = true    ## fix slack reference angle to be zero
+  D[:pw_angle_limits]= false   ## pairwise angle difference constraints
   D[:ramp_pct]       = 0.1     ## |Pg - Pg_contingency| <= ramp_pct * Pg_max
   D[:ctg_feas]       = true    ## contingency objective: true = 0 or false = sum(Pg cost)
   return D

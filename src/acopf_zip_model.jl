@@ -155,5 +155,5 @@ function acopf_zip_model(opfdata, options::Dict=DefaultOptions())
     @printf("Buses: %d  Lines: %d  Generators: %d\n", nbus, nline, ngen)
     println("Lines with limits  ", nlinelim)
   end
-  return OPFModel(opfmodel, :InitData, :D)
+  return OPFModel(opfmodel, :InitData, :D, Dict())
 end

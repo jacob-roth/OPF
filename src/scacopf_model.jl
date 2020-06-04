@@ -153,5 +153,5 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
     end
     @NLobjective(m, Min, objective_full)
 
-    return OPFModel(m, :InitData, :SC)
+    return OPFModel(m, :InitData, :SC, Dict())
 end

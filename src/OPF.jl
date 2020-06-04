@@ -1,6 +1,6 @@
-module OPF
+# module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
-using SparseArrays, LinearAlgebra, NLsolve
+using SparseArrays, LinearAlgebra, NLsolve, ForwardDiff
 using MatrixNetworks, StructArrays, Distributed ## for setting n-1 limits
 using MPCCases
 using Printf
@@ -12,6 +12,7 @@ mutable struct OPFModel
     m::JuMP.Model
     status::Symbol
     kind::Symbol
+    other::Dict
 end
 export OPFModel
 
@@ -69,4 +70,20 @@ export jac_z
 include("sensitivities.jl")
 export get_Gamma, get_Gamma_fd, get_Gamma_ew
 
-end # module
+include("exitrates.jl")
+export acopf_solve_exitrates
+export compute_exitrate_kkt, compute_exitrate_exact
+export write_optimal_values, get_optimal_values
+
+# include("acopf_n1_limits.jl")
+# export set_n1_limits!
+# export get_nonislanding_lines
+# export adjust_feas_ratings!, check_feasibility
+# export adjust_solv_ratings!, check_solvability
+# export remove_line!
+# export reinstate_line!
+# export get_opf_point
+# export get_flowmag2s
+# export get_ratings
+
+# end # module

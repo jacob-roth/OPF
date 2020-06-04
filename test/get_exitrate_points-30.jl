@@ -1,5 +1,4 @@
-const path = "/home/jroth/Projects/planning-large-deviation/data/cases/118-files"
-const path = "/Users/jakeroth/Desktop/planning-large-deviation/data/cases/118-files"
+const path = "/Users/jakeroth/Desktop/planning-large-deviation/data/cases/30-files/"
 const tol = 1e-9
 const plotting = false
 
@@ -11,19 +10,20 @@ using DelimitedFiles
 ## data input
 ## -----------------------------------------------------------------------------
 
-fileout = "/home/jroth/Projects/planning-large-deviation/data/optimalvalues/118bus_lowdamp/"
-fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/"
-case_name = "mpc_lowdamp_pgliblimits"
+constr_limit_scales = [1.10, 1.125, 1.15, 1.20, 1.25].^2
+ratelimits = [Inf; exp10.(collect(-1:-1:-3)); 5e-4]
+fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/30bus-lowdamp/"
+case_name = "mpc-lowdamp"
 
 options = DefaultOptions()
 options[:emergencylimit] = NaN
 options[:ratelimit]      = NaN
 options[:current_rating] = true
 options[:lossless]       = true
-options[:remove_Bshunt]  = false
-options[:remove_tap]     = false
+options[:remove_Bshunt]  = true
+options[:remove_tap]     = true
 options[:shed_load]      = true
-options[:print_level]    = 5
+options[:print_level]    = 1
 
 function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, ratelimits::Array{T,1},
                            options0::Dict, fileout::String) where T <: AbstractFloat
@@ -38,6 +38,8 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
     opfmodel = acopf_model(opfdata, options)
     opfmodel_acopf = acopf_solve(opfmodel, opfdata)
     acopf_outputAll(opfmodel_acopf, opfdata, options)
+    # 118-n1-lowdamp: Objective value: 125947.8781174833. Generation cost = 125947.87945987795USD/hr
+    # 30-mpc-lowdamp: Objective value: 604.249424491365. Generation cost = 604.249424491365USD/hr
 
     ##
     ## exitrates
@@ -56,6 +58,12 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
             opfmodel_exitrates = acopf_solve_exitrates(opfmodel, casedata, options)
             push!(j_models, opfmodel_exitrates)
 
+            # rates = zeros(3, 41)
+            # m = opfmodel_exitrates
+            # for i in 1:41
+            #     rates[:,i] .= [m.other[:prefactors][i]; m.other[:expterms][i]; m.other[:rates][i]]
+            # end
+
             acopf_outputAll(opfmodel_exitrates, opfdata, options) # Objective value: 125947.87811710747. Generation cost = 125947.87948380895USD/hr
             optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
             optimal_values[:rates] = opfmodel_exitrates.other[:rates]
@@ -67,50 +75,12 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
             write_optimal_values(file_out, optimal_values)
         end
         push!(models, j_models)
-
-        ## N-1
-        options[:ramp_pct] = 0.01
-        casedata = load_case(case_name, path; other=true);
-        opfmodeldata = get_opfmodeldata(casedata.opf, options)
-        contingencies = get_all_contingencies(casedata.opf, options)
-        scopfmodel = scacopf_model(casedata.opf, options, DefaultAdjustments(), contingencies)
-        scopfmodel_acopf = scacopf_solve(scopfmodel, opfdata, options, contingencies)
-
-        rates = zeros(length(opfmodeldata[:lines]))
-        prefactors = zeros(length(opfmodeldata[:lines]))
-        expterms = zeros(length(opfmodeldata[:lines]))
-        opfmd = get_opfmodeldata(casedata, options)
-        opfmd[:Y] = imag.(opfmd[:Y])
-        optimal_values = get_optimal_values(scopfmodel_acopf.m, opfmd)
-        pl = options[:print_level]
-        options[:print_level] = 0
-        for l in eachindex(opfmd[:lines])
-            ep = compute_exitrate_exact(l, optimal_values, opfmd, options)
-            if ep != nothing
-                exitrate = ep[:prefactor] * ep[:expterm]
-                rates[l] = exitrate
-                prefactors[l] = ep[:prefactor]
-                expterms[l] = ep[:expterm]
-            end
-        end
-        options[:print_level] = pl
-        optimal_values[:rates] = opfmodel_exitrates.other[:rates]
-        optimal_values[:status] = string(scopfmodel_acopf.status)
-        file_out = fileout * "N_1/"
-        mkpath(file_out)
-        write_optimal_values(file_out, optimal_values)
-
     end
     return models
 end
 
-constr_limit_scales = [1.04] #round.(collect(range(1.0, stop=1.1, step=0.02)).^2, digits=2)
-ratelimits = [Inf, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11] #[Inf; exp10.(collect(range(3, stop=-4, step=-1)))]
-models1 = set_optimalvalues(case_name, constr_limit_scales[1:1], ratelimits, options, fileout)
-ratelimits = [1e-12, 1e-16, 1e-20, 1e-24, 1e-28, 1e-30]
-models2 = set_optimalvalues(case_name, constr_limit_scales[1:1], ratelimits, options, fileout)
-
-ratelimits = [1e-30, 1e-40, 1e-50, 1e-60]
+constr_limit_scales = round.(collect(range(1.20, stop=1.4, step=0.05)).^2, digits=2)
+ratelimits = [Inf; exp10.(collect(range(3, stop=-4, step=-1)))]
 models = set_optimalvalues(case_name, constr_limit_scales[1:1], ratelimits, options, fileout)
 
 # set_optimalvalues(case_name, constr_limit_scales[1:end], ratelimits[1:end], options, fileout)
