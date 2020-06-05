@@ -34,6 +34,7 @@ function DefaultOptions()
   D[:high_temp_adj]  = false   ## High temperature adjustment to prefactor
   D[:slack0]         = true    ## fix slack reference angle to be zero
   D[:pw_angle_limits]= false   ## pairwise angle difference constraints
+  D[:parallel] = (nprocs() > 1)## evaluate exit rates in parallel
   return D
 end
 

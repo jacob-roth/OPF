@@ -3,6 +3,15 @@ const path = "/home/jroth/Projects/planning-large-deviation/data/cases/118-files
 const tol = 1e-9
 const plotting = false
 
+using Distributed
+@everywhere using Pkg
+@everywhere Pkg.activate("..")
+@everywhere Pkg.instantiate()
+@everywhere begin
+    using MPCCases, StructArrays, LinearAlgebra, ForwardDiff, Printf, SharedArrays, JuMP, Ipopt
+    include("../src/default.jl")
+    include("../src/exitrates.jl")
+end
 import Pkg; Pkg.activate(".."); Pkg.instantiate()
 include("../src/OPF.jl")
 using DelimitedFiles
