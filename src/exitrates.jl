@@ -360,9 +360,10 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     line         = opfmodeldata[:lines][l]
     nrow         = 2nbus - length(nonLoadBuses) - 1
     # flowmax      = (options[:constr_limit_scale]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
-    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
+    # flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
     i            = opfmodeldata[:BusIdx][line.from]
     j            = opfmodeldata[:BusIdx][line.to]
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * max(abs2(Y[i,j]), abs2(Y[j,i]))))
     Vm           = opfmodel[:Vm]
     Va           = opfmodel[:Va]
     Qs           = opfmodel[:Qs]
@@ -664,7 +665,10 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     Y            = opfmodeldata[:Y]
     S            = opfmodeldata[:S]
     # flowmax      = options[:constr_limit_scale]*(line.rateA/(abs(1.0/(line.x*im))*opfmodeldata[:baseMVA]))^2
-    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
+    # flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
+    i            = opfmodeldata[:BusIdx][line.from]
+    j            = opfmodeldata[:BusIdx][line.to]
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * max(abs2(Y[i,j]), abs2(Y[j,i]))))
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
@@ -674,8 +678,6 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
 
 
     ## check if exit rate formula is applicable
-    i = opfmodeldata[:BusIdx][line.from]
-    j = opfmodeldata[:BusIdx][line.to]
     if ((i in nonLoadBuses && j in nonLoadBuses) || line.rateA==0 || line.rateA>=1.0e10)
         return nothing
     end
@@ -811,7 +813,10 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     baseMVA      = opfmodeldata[:baseMVA]
     S            = opfmodeldata[:S]
     # flowmax      = (options[:constr_limit_scale]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
-    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
+    # flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
+    i            = opfmodeldata[:BusIdx][line.from]
+    j            = opfmodeldata[:BusIdx][line.to]
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * max(abs2(Y[i,j]), abs2(Y[j,i]))))
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
@@ -820,8 +825,6 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
 
 
     ## check if exit rate formula is applicable
-    i = opfmodeldata[:BusIdx][line.from]
-    j = opfmodeldata[:BusIdx][line.to]
     if ((i in nonLoadBuses && j in nonLoadBuses) || line.rateA==0 || line.rateA>=1.0e10)
         return nothing
     end
