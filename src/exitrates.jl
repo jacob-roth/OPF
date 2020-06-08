@@ -108,6 +108,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
     other[:rates] = rates
     other[:prefactors] = prefactors
     other[:expterms] = expterms
+    other[:opfmodeldata] = opfmodeldata
     return (opfmodel, status), other
 end
 function acopf_solve_exitrates(M::OPFModel, casedata::CaseData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)

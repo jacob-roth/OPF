@@ -12,7 +12,8 @@ using DelimitedFiles
 ## -----------------------------------------------------------------------------
 
 fileout = "/home/jroth/Projects/planning-large-deviation/data/optimalvalues/118bus_lowdamp/"
-fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/"
+fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/"
+fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/"
 case_name = "mpc_lowdamp_pgliblimits"
 
 options = DefaultOptions()
@@ -57,7 +58,7 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
             push!(j_models, opfmodel_exitrates)
 
             acopf_outputAll(opfmodel_exitrates, opfdata, options) # Objective value: 125947.87811710747. Generation cost = 125947.87948380895USD/hr
-            optimal_values = get_optimal_values(opfmodel_exitrates.m, get_opfmodeldata(opfdata, options))
+            optimal_values = get_optimal_values(opfmodel_exitrates.m, opfmodel_exitrates.other[:opfmodeldata])
             optimal_values[:rates] = opfmodel_exitrates.other[:rates]
             optimal_values[:status] = string(opfmodel_exitrates.status)
             scale_fmt = @sprintf("%0.0d", Int(round(100(options[:constr_limit_scale]-1.0), digits=0)))
@@ -94,12 +95,11 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
             end
         end
         options[:print_level] = pl
-        optimal_values[:rates] = opfmodel_exitrates.other[:rates]
+        optimal_values[:rates] = rates
         optimal_values[:status] = string(scopfmodel_acopf.status)
         file_out = fileout * "N_1/"
         mkpath(file_out)
         write_optimal_values(file_out, optimal_values)
-
     end
     return models
 end
@@ -118,3 +118,10 @@ sumrates = zeros(length(models[1]))
 for i in eachindex(models[1])
     sumrates[i] = sum(models[1][i].other[:rates])
 end
+
+
+file_out1 = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/Inf/"
+file_out2 = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/Inf_orig/"
+x1 = readdlm(file_out1 * "rates.csv")
+x2 = readdlm(file_out2 * "rates.csv")
+norm(x1-x2)
