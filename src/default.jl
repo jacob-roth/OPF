@@ -41,6 +41,7 @@ function DefaultOptions()
   D[:pw_angle_limits]= false   ## pairwise angle difference constraints
   D[:ramp_pct]       = 0.1     ## |Pg - Pg_contingency| <= ramp_pct * Pg_max
   D[:ctg_feas]       = true    ## contingency objective: true = 0 or false = sum(Pg cost)
+  D[:parallel] = (nprocs() > 1)## evaluate exit rates in parallel
   return D
 end
 

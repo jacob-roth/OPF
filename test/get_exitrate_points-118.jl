@@ -3,6 +3,16 @@ const path = "/Users/jakeroth/Desktop/planning-large-deviation/data/cases/118-fi
 const tol = 1e-9
 const plotting = false
 
+using Distributed
+addprocs(4)
+@everywhere using Pkg
+@everywhere Pkg.activate("..")
+@everywhere Pkg.instantiate()
+@everywhere begin
+    using MPCCases, StructArrays, LinearAlgebra, ForwardDiff, Printf, SharedArrays, JuMP, Ipopt
+    include("../src/default.jl")
+    include("../src/exitrates.jl")
+end
 import Pkg; Pkg.activate(".."); Pkg.instantiate()
 include("../src/OPF.jl")
 using DelimitedFiles
@@ -120,8 +130,8 @@ for i in eachindex(models[1])
 end
 
 
-file_out1 = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/Inf/"
-file_out2 = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/Inf_orig/"
-x1 = readdlm(file_out1 * "rates.csv")
-x2 = readdlm(file_out2 * "rates.csv")
-norm(x1-x2)
+# file_out1 = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/1e-30/"
+# file_out2 = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/1e-30_v2/"
+# x1 = readdlm(file_out1 * "rates.csv")
+# x2 = readdlm(file_out2 * "rates.csv")
+# norm(x1-x2)

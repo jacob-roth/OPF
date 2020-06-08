@@ -1,11 +1,12 @@
 ## -----------------------------------------------------------------------------
 ## Solve ACOPF with transition rate constraints for line current limits
 ## -----------------------------------------------------------------------------
-function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false, other=Dict())
+function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false, other=Dict())
     ## setup
     opfdata, physdata = casedata.opf, casedata.phys
     opfmodeldata = get_opfmodeldata(casedata, options, adjustments)
     opfmodeldata[:Y] = imag.(opfmodeldata[:Y])
+    other[:opfmodeldata] = opfmodeldata
     lines        = opfmodeldata[:lines]
     busIdx       = opfmodeldata[:BusIdx]
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
@@ -38,28 +39,12 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
         solution = get_optimal_values(opfmodel, opfmodeldata)
 
         ## loop over lines and check exit rates
-        updated = false
         pl = deepcopy(options[:print_level])
         options[:print_level] = 0
-        for l in 1:length(lines)
-            ## Skip if we have already checked this line
-            (l in lines_with_added_rate_constraints) && continue
-
-            ## compute the exit rate of this line
-            exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
-            (exit_point == nothing) && continue
-            exitrate = exit_point[:prefactor] * exit_point[:expterm]
-
-            ## check if exit rate is within threshold
-            if exitrate <= options[:ratelimit]
-                continue
-            end
-
-            ## add exit rate constraint
-            updated = true
-            push!(lines_with_added_rate_constraints, l)
-            println("adding constraint for line $l")
-            add_exitrate_constraint!(l, exit_point, opfmodel, opfmodeldata, options)
+        if options[:parallel]
+            updated = compute_add_exitrates_parallel(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
+        else
+            updated = compute_add_exitrates_serial(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
         end
         options[:print_level] = pl
 
@@ -84,11 +69,122 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
         end
     end
 
+    ## Recompute all exitrates using exact calculation
+    pl = deepcopy(options[:print_level])
+    options[:print_level] = 0
+    if options[:parallel]
+        compute_exitrate_exact_all_parallel(solution, opfmodeldata, options, other)
+    else
+        compute_exitrate_exact_all_serial(solution, opfmodeldata, options, other)
+    end
+    options[:print_level] = pl
+
+    return (opfmodel, status), other
+end
+function acopf_solve_exitrates(M, casedata, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)
+    opfm = acopf_solve_exitrates(M.m, casedata, options, adjustments, warm_point_given, M.other)
+    return OPFModel(opfm[1]..., M.kind, M.other)
+end
+
+## -----------------------------------------------------------------------------
+## Helper functions for control flow of the main loop
+## -----------------------------------------------------------------------------
+function compute_add_exitrates_parallel(solution::Dict, opfmodel::JuMP.Model, opfmodeldata::Dict, lines_with_added_rate_constraints, options::Dict)
+    updated = false
+    lines = opfmodeldata[:lines]
+    lines_to_check = symdiff(1:length(lines), lines_with_added_rate_constraints)
+
+    ## compute the exit rate of lines in parallel
+    exitrate = SharedVector{Float64}(length(lines))
+    @sync for l in lines_to_check
+        function ratecalc()
+            exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
+            if exit_point !== nothing
+                exitrate[l] = exit_point[:prefactor] * exit_point[:expterm]
+            end
+        end
+        @async @spawn ratecalc()
+    end
+
+    ## re-compute the exit rates of violated lines (to get starting points)
+    for l in lines_to_check
+        ## check if exit rate is within threshold
+        if exitrate[l] <= options[:ratelimit]
+            continue
+        end
+
+        ## add exit rate constraint
+        updated = true
+        exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
+        push!(lines_with_added_rate_constraints, l)
+        println("adding constraint for line $l")
+        add_exitrate_constraint!(l, exit_point, opfmodel, opfmodeldata, options)
+    end
+
+    return updated
+end
+
+function compute_add_exitrates_serial(solution::Dict, opfmodel::JuMP.Model, opfmodeldata::Dict, lines_with_added_rate_constraints, options::Dict)
+    updated = false
+    for l in 1:length(opfmodeldata[:lines])
+        ## Skip if we have already checked this line
+        (l in lines_with_added_rate_constraints) && continue
+
+        ## compute the exit rate of this line
+        exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
+        (exit_point == nothing) && continue
+        exitrate = exit_point[:prefactor] * exit_point[:expterm]
+
+        ## check if exit rate is within threshold
+        if exitrate <= options[:ratelimit]
+            continue
+        end
+
+        ## add exit rate constraint
+        updated = true
+        push!(lines_with_added_rate_constraints, l)
+        println("adding constraint for line $l")
+        add_exitrate_constraint!(l, exit_point, opfmodel, opfmodeldata, options)
+    end
+    return updated
+end
+
+function compute_exitrate_exact_all_parallel(solution::Dict, opfmodeldata::Dict, options::Dict, result::Dict)
+    lines = opfmodeldata[:lines]
+    rates = SharedVector{Float64}(length(lines))
+    prefactors = SharedVector{Float64}(length(lines))
+    expterms = SharedVector{Float64}(length(lines))
+    rates_kkt = SharedVector{Float64}(length(lines))
+    @sync for l in 1:length(lines)
+        function ratecalc()
+            exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
+            if exit_point !== nothing
+                rates_kkt[l] = exit_point[:prefactor] * exit_point[:expterm]
+            end
+
+            ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
+            if ep2 !== nothing
+                rates[l] = ep2[:prefactor] * ep2[:expterm]
+                prefactors[l] = ep2[:prefactor]
+                expterms[l] = ep2[:expterm]
+            end
+        end
+        @async @spawn ratecalc()
+    end
+    for l in eachindex(lines)
+        @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(rates_kkt[l]/rates[l])))
+    end
+
+    result[:rates] = rates
+    result[:prefactors] = prefactors
+    result[:expterms] = expterms
+end
+
+function compute_exitrate_exact_all_serial(solution::Dict, opfmodeldata::Dict, options::Dict, result::Dict)
+    lines = opfmodeldata[:lines]
     rates = zeros(length(lines))
     prefactors = zeros(length(lines))
     expterms = zeros(length(lines))
-    pl = deepcopy(options[:print_level])
-    options[:print_level] = 0
     for l in eachindex(lines)
         exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
         (exit_point == nothing) && continue
@@ -96,31 +192,22 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata::CaseData, options
 
         ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
         if ep2 != nothing
-            exitrate2 = ep2[:prefactor] * ep2[:expterm]
-            rates[l] = exitrate2
+            rates[l] = ep2[:prefactor] * ep2[:expterm]
             prefactors[l] = ep2[:prefactor]
             expterms[l] = ep2[:expterm]
-            @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, exitrate2, abs(log(exitrate/exitrate2)))
+            @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(exitrate/rates[l])))
         end
     end
-    options[:print_level] = pl
 
-    other[:rates] = rates
-    other[:prefactors] = prefactors
-    other[:expterms] = expterms
-    other[:opfmodeldata] = opfmodeldata
-    return (opfmodel, status), other
+    result[:rates] = rates
+    result[:prefactors] = prefactors
+    result[:expterms] = expterms
 end
-function acopf_solve_exitrates(M::OPFModel, casedata::CaseData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)
-    opfm = acopf_solve_exitrates(M.m, casedata, options, adjustments, warm_point_given, M.other)
-    return OPFModel(opfm[1]..., M.kind, M.other)
-end
-
 
 ## -----------------------------------------------------------------------------
 ## helpful functions
 ## -----------------------------------------------------------------------------
-function get_initial_point(opfmodel::JuMP.Model, opfdata::OPFData, warm_point_given=false)
+function get_initial_point(opfmodel::JuMP.Model, opfdata, warm_point_given=false)
     #
     # initial point - needed especially for pegase cases
     #
@@ -362,9 +449,10 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     line         = opfmodeldata[:lines][l]
     nrow         = 2nbus - length(nonLoadBuses) - 1
     # flowmax      = (options[:constr_limit_scale]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
-    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))  ## NOT ACCOUNTING FOR TAPS
     i            = opfmodeldata[:BusIdx][line.from]
     j            = opfmodeldata[:BusIdx][line.to]
+    # flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * max(abs2(Y[i,j]), abs2(Y[j,i]))))
     Vm           = opfmodel[:Vm]
     Va           = opfmodel[:Va]
     Qs           = opfmodel[:Qs]
@@ -666,7 +754,10 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     Y            = opfmodeldata[:Y]
     S            = opfmodeldata[:S]
     # flowmax      = options[:constr_limit_scale]*(line.rateA/(abs(1.0/(line.x*im))*opfmodeldata[:baseMVA]))^2
-    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))  ## NOT ACCOUNTING FOR TAPS
+    i            = opfmodeldata[:BusIdx][line.from]
+    j            = opfmodeldata[:BusIdx][line.to]
+    # flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * max(abs2(Y[i,j]), abs2(Y[j,i]))))
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
@@ -676,8 +767,6 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
 
 
     ## check if exit rate formula is applicable
-    i = opfmodeldata[:BusIdx][line.from]
-    j = opfmodeldata[:BusIdx][line.to]
     if ((i in nonLoadBuses && j in nonLoadBuses) || line.rateA==0 || line.rateA>=1.0e10)
         return nothing
     end
@@ -810,10 +899,14 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     line         = opfmodeldata[:lines][l]
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
     bus_ref      = opfmodeldata[:bus_ref]
+    Y            = opfmodeldata[:Y]
     baseMVA      = opfmodeldata[:baseMVA]
     S            = opfmodeldata[:S]
     # flowmax      = (options[:constr_limit_scale]*line.rateA/(abs(1.0/(line.x*im))*baseMVA))^2
-    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))  ## NOT ACCOUNTING FOR TAPS
+    i            = opfmodeldata[:BusIdx][line.from]
+    j            = opfmodeldata[:BusIdx][line.to]
+    # flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * max(abs2(Y[i,j]), abs2(Y[j,i]))))
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
@@ -822,8 +915,6 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
 
 
     ## check if exit rate formula is applicable
-    i = opfmodeldata[:BusIdx][line.from]
-    j = opfmodeldata[:BusIdx][line.to]
     if ((i in nonLoadBuses && j in nonLoadBuses) || line.rateA==0 || line.rateA>=1.0e10)
         return nothing
     end
