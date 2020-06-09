@@ -1,4 +1,4 @@
-# module OPF
+module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra, NLsolve, ForwardDiff
 using MatrixNetworks, StructArrays, Distributed ## for setting n-1 limits
@@ -86,4 +86,4 @@ export write_optimal_values, get_optimal_values
 # export get_flowmag2s
 # export get_ratings
 
-# end # module
+end # module
