@@ -261,16 +261,32 @@ function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, 
         end
         if options[:remove_tap] == false
           t   = (line.ratio == 0.0 ? 1.0 : line.ratio) * exp(im * line.angle)
+          a   = real(t)
+          b   = imag(t)
           Tik = abs(t)
           φik = angle(t)
         else
           Tik = 1.0
           φik = 0.0
+          a   = 1.0
+          b   = 0.0
         end
-        ## NOTE: current from Frank & Rebennack OPF primer eq 5.11; turns/tap ratios are not accounted for
-        # F_l = @NLexpression(opfmodel, current2, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)) - flowmax/Yabs2)
-        F_l = @NLexpression(opfmodel, current2, ((Vm_f/Tik)^2 + Vm_t^2 - 2 * (Vm_f/Tik) * Vm_t * cos((Va_f-φik) - Va_t))*Yabs2 - flowmax)
+        ## NOTE: current from Frank & Rebennack OPF primer eq 4.6; turns/tap ratios ARE accounted for; eq 5.11 + Remark 5.1 looks wrong
+        F_l = @NLexpression(opfmodel, current2, (Vm_f^2 + (a^2 + b^2) * Vm_t^2 - 2 * Vm_f * Vm_t * ( a * cos(Va_f - Va_t) + b * sin(Va_f - Va_t) ))*(Yabs2/(a^2 + b^2)^2) - flowmax)
         @NLconstraint(opfmodel, current2 <= 0)
+        # F_l1 = @NLexpression(opfmodel, current2_1, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)) - flowmax/Yabs2)
+        # F_l2 = @NLexpression(opfmodel, current2_2, ((Vm_f/Tik)^2 + Vm_t^2 - 2 * (Vm_f/Tik) * Vm_t * cos((Va_f-φik) - Va_t))*Yabs2 - flowmax)
+        # F_l3 = @NLexpression(opfmodel, current2_3, (Vm_f^2 + (a^2 + b^2) * Vm_t^2 - 2 * Vm_f * Vm_t * ( a * cos(Va_f - Va_t) + b * sin(Va_f - Va_t) ))*(Yabs2/(a^2 + b^2)^2) - flowmax)
+        # if options[:cc_type] == 1
+        #   @NLconstraint(opfmodel, current2_1 <= 0)
+        #   F_l = F_l1
+        # elseif options[:cc_type] == 2
+        #   @NLconstraint(opfmodel, current2_2 <= 0)
+        #   F_l = F_l2
+        # elseif options[:cc_type] == 3
+        #   @NLconstraint(opfmodel, current2_3 <= 0)
+        #   F_l = F_l3
+        # end
 
         if c == 0
             Fl = "F$(l)"
@@ -401,3 +417,74 @@ end
 #   crrs[i] = c
 #   iv2s[i] = iv
 # end
+
+# function ik(a, b, V, W)
+#   t = a + im*b
+#   return 1/(t*conj(t)) * V - 1/conj(t)*W
+# end
+# function ki(a, b, V, W)
+#   t = a + im*b
+#   return -1/conj(t)*W + 1/t * V
+# end
+# function c2(a, b, V, W)
+#   Vm = abs(V); Va = angle(V)
+#   Wm = abs(W); Wa = angle(W)
+#   t  = a + im*b
+#   m  = abs(t)
+#   α  = angle(t)
+#   return (Vm/m)^2 + Wm^2 - 2Vm/m*Wm*cos(Va-Wa-α)
+# end
+# function c2_(a, b, V, W)
+#   Vm = abs(V); Va = angle(V)
+#   Wm = abs(W); Wa = angle(W)
+#   t  = a + im*b
+#   m  = abs(t)
+#   α  = angle(t)
+#   return (Vm/m * cos(Va-α) - Wm * cos(Wa))^2 + (Vm/m * sin(Va-α) - Wm * sin(Wa))^2
+# end
+# function d2(a, b, V, W)
+#   Vm = abs(V); Va = angle(V)
+#   Wm = abs(W); Wa = angle(W)
+#   t  = a + im*b
+#   m  = abs(t)
+#   α  = angle(t)
+#   return (Vm/m * cos(Va-α) - Wm * cos(Wa))^2 + (Vm * sin(Va) - Wm * sin(Wa))^2
+# end
+# function e2(a, b, V, W)
+#   Vm = abs(V); Va = angle(V)
+#   Wm = abs(W); Wa = angle(W)
+#   t  = a + im*b
+#   m  = abs(t)
+#   α  = angle(t)
+#   return (Vm^2 + (a^2 + b^2) * Wm^2 - 2Vm*Wm * (  a*cos(Va-Wa) + b*sin(Va-Wa)  )) / (a^2 + b^2)^2
+# end
+#
+#
+# ik2s = zeros(1000)
+# ki2s = zeros(1000)
+# c2s  = zeros(1000)
+# c2_s = zeros(1000)
+# d2s  = zeros(1000)
+# e2s  = zeros(1000)
+# for i in 1:1000
+#   a = 1.0 + 0.01randn() # 1.0 # 1.0 + 0.01randn()
+#   b = 0.01randn() # 0.0 # 0.01randn()
+#   V = (1.0 + 0.1randn()) * exp(im * 0.1randn())
+#   W = (1.0 + 0.1randn()) * exp(im * 0.1randn())
+#   ik2s[i] = abs2(ik(a, b, V, W))
+#   ki2s[i] = abs2(ki(a, b, V, W))
+#   c2s[i]  = c2(a, b, V, W)
+#   c2_s[i] = c2_(a, b, V, W)
+#   d2s[i]  = d2(a, b, V, W)
+#   e2s[i]  = e2(a, b, V, W)
+# end
+#
+# norm(e2s - ik2s)
+#
+# norm(ik2s - ki2s)
+# norm(ik2s - c2s)
+# norm(ki2s - c2s)
+# norm(c2s - c2_s)
+#
+#
+# (V/(sqrt(a^2+b^2)) * cos(v - arg(a+im*b)) - W*cos(w))^2 + (V/(sqrt(a^2+b^2)) * sin(v - arg(a+im*b)) - W*sin(w))^2
