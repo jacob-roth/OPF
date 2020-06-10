@@ -8,6 +8,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
     lines        = opfmodeldata[:lines]
     busIdx       = opfmodeldata[:BusIdx]
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
+    to = TimerOutput()
 
     ## solution vector
     solution = get_initial_point(opfmodel, opfdata, warm_point_given)
@@ -25,7 +26,9 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         set_initial_point!(opfmodel, solution)
 
         ## solve
+        @timeit to "solve nlp" begin
         status = solve(opfmodel)
+        end
         println("\nITER   = $(iter) ")
         println("STATUS = $(string(status))\n")
         println()
@@ -39,10 +42,12 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         ## loop over lines and check exit rates
         pl = deepcopy(options[:print_level])
         options[:print_level] = 0
+        @timeit to "check exit rates using KKT" begin
         if options[:parallel]
             updated = compute_add_exitrates_parallel(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
         else
             updated = compute_add_exitrates_serial(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
+        end
         end
         options[:print_level] = pl
 
@@ -70,12 +75,15 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
     ## Recompute all exitrates using exact calculation
     pl = deepcopy(options[:print_level])
     options[:print_level] = 0
+    @timeit to "check exit rates exact" begin
     if options[:parallel]
         compute_exitrate_exact_all_parallel(solution, opfmodeldata, options, other)
     else
         compute_exitrate_exact_all_serial(solution, opfmodeldata, options, other)
     end
+    end
     options[:print_level] = pl
+    show(to)
 
     return (opfmodel, status), other
 end
@@ -450,7 +458,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     # flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
     i            = opfmodeldata[:BusIdx][line.from]
     j            = opfmodeldata[:BusIdx][line.to]
-    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * max(abs2(Y[i,j]), abs2(Y[j,i]))))
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0 / line.x)))
     Vm           = opfmodel[:Vm]
     Va           = opfmodel[:Va]
     Qs           = opfmodel[:Qs]
@@ -755,7 +763,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     # flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
     i            = opfmodeldata[:BusIdx][line.from]
     j            = opfmodeldata[:BusIdx][line.to]
-    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * max(abs2(Y[i,j]), abs2(Y[j,i]))))
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0 / line.x)))
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
@@ -904,7 +912,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     # flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0/(line.x*im))))
     i            = opfmodeldata[:BusIdx][line.from]
     j            = opfmodeldata[:BusIdx][line.to]
-    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * max(abs2(Y[i,j]), abs2(Y[j,i]))))
+    flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0 / line.x)))
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
