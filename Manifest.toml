@@ -234,6 +234,7 @@ uuid = "8e2b3108-d4c1-50be-a7a2-16352aec75c3"
 version = "0.1.0"
 
 [[LibGit2]]
+deps = ["Printf"]
 uuid = "76f85450-5226-5b5a-8eaa-529ad045b433"
 
 [[Libdl]]
