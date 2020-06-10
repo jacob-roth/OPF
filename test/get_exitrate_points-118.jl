@@ -1,15 +1,16 @@
 const path = "/home/jroth/Projects/planning-large-deviation/data/cases/118-files"
 const path = "/Users/jakeroth/Desktop/planning-large-deviation/data/cases/118-files"
+const path = "/home/asubramanyam/research/planning-large-deviation/data/cases/118-files"
 const tol = 1e-9
 const plotting = false
 
 using Distributed
-addprocs(4)
 @everywhere using Pkg
 @everywhere Pkg.activate("..")
 @everywhere Pkg.instantiate()
 @everywhere begin
     using MPCCases, StructArrays, LinearAlgebra, ForwardDiff, Printf, SharedArrays, JuMP, Ipopt
+    using TimerOutputs
     include("../src/default.jl")
     include("../src/exitrates.jl")
 end
@@ -24,6 +25,7 @@ using DelimitedFiles
 fileout = "/home/jroth/Projects/planning-large-deviation/data/optimalvalues/118bus_lowdamp/"
 fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/"
 fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/"
+fileout = "./___temp___/"
 case_name = "mpc_lowdamp_pgliblimits"
 
 options = DefaultOptions()

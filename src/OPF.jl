@@ -6,6 +6,7 @@ using MPCCases
 using Printf
 using Pkg
 using Statistics
+using TimerOutputs
 ## based on: https://github.com/StructJuMP/StructJuMP.jl/tree/master/examples/PowerGrid
 
 mutable struct OPFModel
