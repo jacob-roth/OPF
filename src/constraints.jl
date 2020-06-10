@@ -39,12 +39,16 @@ function add_p_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
     Vm = Vm0
     Va = Va0
   else
-    Pg = opfmodel[Symbol("Pg_$(c)_container")]
-    Qg = opfmodel[Symbol("Qg_$(c)_container")]
-    Ps = opfmodel[Symbol("Ps_$(c)_container")]
-    Qs = opfmodel[Symbol("Qs_$(c)_container")]
-    Vm = opfmodel[Symbol("Vm_$(c)_container")]
-    Va = opfmodel[Symbol("Va_$(c)_container")]
+    Pg = opfmodel[Symbol("Pg_$(c)")]
+    Qg = opfmodel[Symbol("Qg_$(c)")]
+    Vm = opfmodel[Symbol("Vm_$(c)")]
+    Va = opfmodel[Symbol("Va_$(c)")]
+    Ps = Ps0
+    Qs = Qs0
+    # # Pg = opfmodel[Symbol("Pg_$(c)_container")]
+    # # Qg = opfmodel[Symbol("Qg_$(c)_container")]
+    # # Vm = opfmodel[Symbol("Vm_$(c)_container")]
+    # # Va = opfmodel[Symbol("Va_$(c)_container")]
     # Pg    = Array{Variable,1}(undef, ngen)
     # Qg    = Array{Variable,1}(undef, ngen)
     # Vm    = Array{Variable,1}(undef, nbus)
@@ -87,6 +91,7 @@ function add_p_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
     - ( sum(baseMVA*Pg[g] for g in BusGeners[b]) - buses[b].Pd ) / baseMVA      # Sbus part
     - ( Ps[b] / baseMVA )
     )
+
   @NLconstraint(opfmodel, P_b==0)
   if c == 0
     Pb = "P$(b)"
@@ -137,12 +142,16 @@ function add_q_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
     Vm = Vm0
     Va = Va0
   else
-    Pg = opfmodel[Symbol("Pg_$(c)_container")]
-    Qg = opfmodel[Symbol("Qg_$(c)_container")]
-    Ps = opfmodel[Symbol("Ps_$(c)_container")]
-    Qs = opfmodel[Symbol("Qs_$(c)_container")]
-    Vm = opfmodel[Symbol("Vm_$(c)_container")]
-    Va = opfmodel[Symbol("Va_$(c)_container")]
+    Pg = opfmodel[Symbol("Pg_$(c)")]
+    Qg = opfmodel[Symbol("Qg_$(c)")]
+    Vm = opfmodel[Symbol("Vm_$(c)")]
+    Va = opfmodel[Symbol("Va_$(c)")]
+    Ps = Ps0
+    Qs = Qs0
+    # # Pg = opfmodel[Symbol("Pg_$(c)_container")]
+    # # Qg = opfmodel[Symbol("Qg_$(c)_container")]
+    # # Vm = opfmodel[Symbol("Vm_$(c)_container")]
+    # # Va = opfmodel[Symbol("Va_$(c)_container")]
     # Pg    = Array{Variable,1}(undef, ngen)
     # Qg    = Array{Variable,1}(undef, ngen)
     # Vm    = Array{Variable,1}(undef, nbus)
@@ -192,66 +201,101 @@ function add_q_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, b::Int64, c
 end
 
 function add_line_current_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, l::Int64, c::Int64=0)
-  Pg0        = opfmodel[:Pg]
-  Qg0        = opfmodel[:Qg]
-  Vm0        = opfmodel[:Vm]
-  Va0        = opfmodel[:Va]
-  lines      = opfmodeldata[:lines];
-  buses      = opfmodeldata[:buses];
-  generators = opfmodeldata[:generators];
-  baseMVA    = opfmodeldata[:baseMVA];
-  busIdx     = opfmodeldata[:BusIdx];
-  FromLines  = opfmodeldata[:FromLines];
-  ToLines    = opfmodeldata[:ToLines];
-  BusGeners  = opfmodeldata[:BusGenerators];
-  YffR       = opfmodeldata[:YffR];
-  YffI       = opfmodeldata[:YffI];
-  YttR       = opfmodeldata[:YttR];
-  YttI       = opfmodeldata[:YttI];
-  YftR       = opfmodeldata[:YftR];
-  YftI       = opfmodeldata[:YftI];
-  YtfR       = opfmodeldata[:YtfR];
-  YtfI       = opfmodeldata[:YtfI];
-  YshR       = opfmodeldata[:YshR];
-  YshI       = opfmodeldata[:YshI];
-  Y          = opfmodeldata[:Y];
-  nbus = length(buses); nline = length(lines); ngen = length(generators)
+    Pg0        = opfmodel[:Pg]
+    Qg0        = opfmodel[:Qg]
+    Vm0        = opfmodel[:Vm]
+    Va0        = opfmodel[:Va]
+    lines      = opfmodeldata[:lines];
+    buses      = opfmodeldata[:buses];
+    generators = opfmodeldata[:generators];
+    baseMVA    = opfmodeldata[:baseMVA];
+    busIdx     = opfmodeldata[:BusIdx];
+    FromLines  = opfmodeldata[:FromLines];
+    ToLines    = opfmodeldata[:ToLines];
+    BusGeners  = opfmodeldata[:BusGenerators];
+    YffR       = opfmodeldata[:YffR];
+    YffI       = opfmodeldata[:YffI];
+    YttR       = opfmodeldata[:YttR];
+    YttI       = opfmodeldata[:YttI];
+    YftR       = opfmodeldata[:YftR];
+    YftI       = opfmodeldata[:YftI];
+    YtfR       = opfmodeldata[:YtfR];
+    YtfI       = opfmodeldata[:YtfI];
+    YshR       = opfmodeldata[:YshR];
+    YshI       = opfmodeldata[:YshI];
+    Y          = opfmodeldata[:Y];
+    nbus = length(buses); nline = length(lines); ngen = length(generators)
 
-  ## composite
-  if c == 0
-    Pg = Pg0
-    Qg = Qg0
-    Vm = Vm0
-    Va = Va0
-  else
-    Pg = opfmodel[Symbol("Pg_$(c)_container")]
-    Qg = opfmodel[Symbol("Qg_$(c)_container")]
-    Vm = opfmodel[Symbol("Vm_$(c)_container")]
-    Va = opfmodel[Symbol("Va_$(c)_container")]
-  end
-
-  line = lines[lines.id .== l][1]
-  if line.rateA!=0 && line.rateA<1.0e10
-    flowmax=(line.rateA/baseMVA)^2
-    # branch current flows
-    f = busIdx[line.from]
-    t = busIdx[line.to]
-    Y_tf = Y[t,f]
-    Y_ft = Y[f,t]
-    Vm_f = Vm[f]; Va_f = Va[f]
-    Vm_t = Vm[t]; Va_t = Va[t]
-    Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
-    ## NOTE: current from Frank & Rebennack OPF primer: eq 5.11 where turns/tap ratios are accounted for in `Y`
-    F_l = @NLexpression(opfmodel, current2, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)) * Yabs2 - flowmax)
-    @NLconstraint(opfmodel, current2 <= 0)
-
+    ## composite
     if c == 0
-      Fl = "F$(l)"
+        Pg = Pg0
+        Qg = Qg0
+        Vm = Vm0
+        Va = Va0
     else
-      Fl = "c$(c)_F$(l)"
+        Pg = opfmodel[Symbol("Pg_$(c)")]
+        Qg = opfmodel[Symbol("Qg_$(c)")]
+        Vm = opfmodel[Symbol("Vm_$(c)")]
+        Va = opfmodel[Symbol("Va_$(c)")]
+        # # Pg = opfmodel[Symbol("Pg_$(c)_container")]
+        # # Qg = opfmodel[Symbol("Qg_$(c)_container")]
+        # # Vm = opfmodel[Symbol("Vm_$(c)_container")]
+        # # Va = opfmodel[Symbol("Va_$(c)_container")]
     end
-    JuMP.registerobject(opfmodel, Symbol(Fl), F_l, Fl)
-  end
+
+    line = lines[lines.id .== l][1]
+    if line.rateA != 0 && line.rateA < 1.0e10
+        flowmax=(line.rateA/baseMVA)^2
+        # branch current flows
+        f = line.from; t = line.to
+        f_idx = first(findall(opfmodeldata[:buses].bus_i .== line.from)); t_idx = first(findall(opfmodeldata[:buses].bus_i .== line.to))
+        Y_tf = Y[t_idx,f_idx]
+        Y_ft = Y[f_idx,t_idx]
+        Vm_f = Vm[f_idx]; Va_f = Va[f_idx]
+        Vm_t = Vm[t_idx]; Va_t = Va[t_idx]
+        # Yabs2 = max(abs2(Y_tf), abs2(Y_ft))
+        if options[:lossless] == true
+          Yabs2 = abs2(1.0 / line.x)
+        else
+          Yabs2 = abs2(line.r / (line.r^2 + line.x^2) - im * (line.x / (line.r^2 + line.x^2)))
+        end
+        if options[:remove_tap] == false
+          t   = (line.ratio == 0.0 ? 1.0 : line.ratio) * exp(im * line.angle)
+          a   = real(t)
+          b   = imag(t)
+          Tik = abs(t)
+          φik = angle(t)
+        else
+          Tik = 1.0
+          φik = 0.0
+          a   = 1.0
+          b   = 0.0
+        end
+        ## NOTE: current from Frank & Rebennack OPF primer eq 4.6; turns/tap ratios ARE accounted for; eq 5.11 + Remark 5.1 looks wrong
+        F_l = @NLexpression(opfmodel, current2, (Vm_f^2 + (a^2 + b^2) * Vm_t^2 - 2 * Vm_f * Vm_t * ( a * cos(Va_f - Va_t) + b * sin(Va_f - Va_t) ))*(Yabs2/(a^2 + b^2)^2) - flowmax)
+        @NLconstraint(opfmodel, current2 <= 0)
+        # F_l1 = @NLexpression(opfmodel, current2_1, (Vm_f^2 + Vm_t^2 - 2 * Vm_f * Vm_t * cos(Va_f - Va_t)) - flowmax/Yabs2)
+        # F_l2 = @NLexpression(opfmodel, current2_2, ((Vm_f/Tik)^2 + Vm_t^2 - 2 * (Vm_f/Tik) * Vm_t * cos((Va_f-φik) - Va_t))*Yabs2 - flowmax)
+        # F_l3 = @NLexpression(opfmodel, current2_3, (Vm_f^2 + (a^2 + b^2) * Vm_t^2 - 2 * Vm_f * Vm_t * ( a * cos(Va_f - Va_t) + b * sin(Va_f - Va_t) ))*(Yabs2/(a^2 + b^2)^2) - flowmax)
+        # if options[:cc_type] == 1
+        #   @NLconstraint(opfmodel, current2_1 <= 0)
+        #   F_l = F_l1
+        # elseif options[:cc_type] == 2
+        #   @NLconstraint(opfmodel, current2_2 <= 0)
+        #   F_l = F_l2
+        # elseif options[:cc_type] == 3
+        #   @NLconstraint(opfmodel, current2_3 <= 0)
+        #   F_l = F_l3
+        # end
+
+        if c == 0
+            Fl = "F$(l)"
+        else
+            Fl = "c$(c)_F$(l)"
+        end
+
+        JuMP.registerobject(opfmodel, Symbol(Fl), F_l, Fl)
+    end
 end
 
 function add_line_power_constraint!(opfmodel::JuMP.Model, opfmodeldata::Dict, l::Int64, c::Int64=0)
@@ -321,3 +365,126 @@ end
 function add_sc_constraint!(opfmodel::JuMP.Model, sc_data::Dict)
   @NLexpression(opfmodel, 1)
 end
+
+
+# function pwr(Vm, Va, opfmd::Dict, options::Dict, l::Int)
+#   lines  = opfmd[:lines]
+#   busIdx = opfmd[:BusIdx]
+#   YffR   = opfmd[:YffR];
+#   YffI   = opfmd[:YffI];
+#   YttR   = opfmd[:YttR];
+#   YttI   = opfmd[:YttI];
+#   YftR   = opfmd[:YftR];
+#   YftI   = opfmd[:YftI];
+#   YtfR   = opfmd[:YtfR];
+#   YtfI   = opfmd[:YtfI];
+#   YshR   = opfmd[:YshR];
+#   YshI   = opfmd[:YshI];
+#
+#   Yff_abs2=YffR[l]^2+YffI[l]^2; Yft_abs2=YftR[l]^2+YftI[l]^2
+#   Yre=YffR[l]*YftR[l]+YffI[l]*YftI[l]; Yim=-YffR[l]*YftI[l]+YffI[l]*YftR[l]
+#   sabs2 = Vm[busIdx[lines[l].from]]^2 *
+#             (
+#               Yff_abs2*Vm[busIdx[lines[l].from]]^2 + Yft_abs2*Vm[busIdx[lines[l].to]]^2
+#               + 2*Vm[busIdx[lines[l].from]]*Vm[busIdx[lines[l].to]]*(Yre*cos(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]])-Yim*sin(Va[busIdx[lines[l].from]]-Va[busIdx[lines[l].to]]))
+#             )
+#
+#   line = lines[l]
+#   if options[:lossless] == true
+#     Yabs2 = (1.0 / line.x)^2
+#   else
+#     Yabs2 = abs2(line.r / (line.r^2 + line.x^2) - im * (line.x / (line.r^2 + line.x^2)))
+#   end
+#   if options[:remove_tap] == true
+#     t   = (line.ratio == 0.0 ? 1.0 : line.ratio) * exp(im * line.angle)
+#     Tik = abs(t)
+#     φik = angle(t)
+#   else
+#     Tik = 1.0
+#     φik = 0.0
+#   end
+#   curr2 = Yabs2 * ((Vm[busIdx[lines[l].from]]/Tik)^2 + Vm[busIdx[lines[l].to]]^2
+#           - 2*((Vm[busIdx[lines[l].from]]/Tik)*Vm[busIdx[lines[l].to]]*(cos((Va[busIdx[lines[l].from]] - φik) - Va[busIdx[lines[l].to]]))))
+#   iv2 = curr2 * Vm[busIdx[lines[l].from]]^2
+#   return sabs2, curr2, iv2
+# end
+# pwrs = zeros(length(lines))
+# crrs = zeros(length(lines))
+# iv2s = zeros(length(lines))
+# for i in eachindex(lines)
+#   s,c,iv = pwr(Vm, Va, opfmd, case_options, i)
+#   pwrs[i] = s
+#   crrs[i] = c
+#   iv2s[i] = iv
+# end
+
+# function ik(a, b, V, W)
+#   t = a + im*b
+#   return 1/(t*conj(t)) * V - 1/conj(t)*W
+# end
+# function ki(a, b, V, W)
+#   t = a + im*b
+#   return -1/conj(t)*W + 1/t * V
+# end
+# function c2(a, b, V, W)
+#   Vm = abs(V); Va = angle(V)
+#   Wm = abs(W); Wa = angle(W)
+#   t  = a + im*b
+#   m  = abs(t)
+#   α  = angle(t)
+#   return (Vm/m)^2 + Wm^2 - 2Vm/m*Wm*cos(Va-Wa-α)
+# end
+# function c2_(a, b, V, W)
+#   Vm = abs(V); Va = angle(V)
+#   Wm = abs(W); Wa = angle(W)
+#   t  = a + im*b
+#   m  = abs(t)
+#   α  = angle(t)
+#   return (Vm/m * cos(Va-α) - Wm * cos(Wa))^2 + (Vm/m * sin(Va-α) - Wm * sin(Wa))^2
+# end
+# function d2(a, b, V, W)
+#   Vm = abs(V); Va = angle(V)
+#   Wm = abs(W); Wa = angle(W)
+#   t  = a + im*b
+#   m  = abs(t)
+#   α  = angle(t)
+#   return (Vm/m * cos(Va-α) - Wm * cos(Wa))^2 + (Vm * sin(Va) - Wm * sin(Wa))^2
+# end
+# function e2(a, b, V, W)
+#   Vm = abs(V); Va = angle(V)
+#   Wm = abs(W); Wa = angle(W)
+#   t  = a + im*b
+#   m  = abs(t)
+#   α  = angle(t)
+#   return (Vm^2 + (a^2 + b^2) * Wm^2 - 2Vm*Wm * (  a*cos(Va-Wa) + b*sin(Va-Wa)  )) / (a^2 + b^2)^2
+# end
+#
+#
+# ik2s = zeros(1000)
+# ki2s = zeros(1000)
+# c2s  = zeros(1000)
+# c2_s = zeros(1000)
+# d2s  = zeros(1000)
+# e2s  = zeros(1000)
+# for i in 1:1000
+#   a = 1.0 + 0.01randn() # 1.0 # 1.0 + 0.01randn()
+#   b = 0.01randn() # 0.0 # 0.01randn()
+#   V = (1.0 + 0.1randn()) * exp(im * 0.1randn())
+#   W = (1.0 + 0.1randn()) * exp(im * 0.1randn())
+#   ik2s[i] = abs2(ik(a, b, V, W))
+#   ki2s[i] = abs2(ki(a, b, V, W))
+#   c2s[i]  = c2(a, b, V, W)
+#   c2_s[i] = c2_(a, b, V, W)
+#   d2s[i]  = d2(a, b, V, W)
+#   e2s[i]  = e2(a, b, V, W)
+# end
+#
+# norm(e2s - ik2s)
+#
+# norm(ik2s - ki2s)
+# norm(ik2s - c2s)
+# norm(ki2s - c2s)
+# norm(c2s - c2_s)
+#
+#
+# (V/(sqrt(a^2+b^2)) * cos(v - arg(a+im*b)) - W*cos(w))^2 + (V/(sqrt(a^2+b^2)) * sin(v - arg(a+im*b)) - W*sin(w))^2

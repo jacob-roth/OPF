@@ -266,7 +266,7 @@ version = "0.8.0"
 
 [[MPCCases]]
 deps = ["DelimitedFiles", "MAT", "Random", "SparseArrays", "StructArrays"]
-git-tree-sha1 = "daab81db40db19fcf3989ba3f94efe359c03f1a0"
+git-tree-sha1 = "63b989113996d5dd9ba3f8971f0a357cb45c9cb7"
 repo-rev = "master"
 repo-url = "https://github.com/jacob-roth/MPCCases.git"
 uuid = "18da711e-460b-11e9-09d1-c9dc5c0ea288"
@@ -357,9 +357,9 @@ version = "0.12.1"
 
 [[Parsers]]
 deps = ["Dates", "Test"]
-git-tree-sha1 = "f0abb338b4d00306500056a3fd44c221b8473ef2"
+git-tree-sha1 = "eb3e09940c0d7ae01b01d9291ebad7b081c844d3"
 uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
-version = "1.0.4"
+version = "1.0.5"
 
 [[Pkg]]
 deps = ["Dates", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
@@ -414,9 +414,9 @@ uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [[SpecialFunctions]]
 deps = ["OpenSpecFun_jll"]
-git-tree-sha1 = "a69e1eaf3397fbb5a4d718538463e5cc20ef42a4"
+git-tree-sha1 = "d8d8b8a9f4119829410ecd706da4cc8594a1e020"
 uuid = "276daf66-3868-5448-9aa4-cd146d93841b"
-version = "0.10.2"
+version = "0.10.3"
 
 [[StaticArrays]]
 deps = ["LinearAlgebra", "Random", "Statistics"]
@@ -449,6 +449,12 @@ version = "1.0.4"
 [[Test]]
 deps = ["Distributed", "InteractiveUtils", "Logging", "Random"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[[TimerOutputs]]
+deps = ["Printf"]
+git-tree-sha1 = "f458ca23ff80e46a630922c555d838303e4b9603"
+uuid = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
+version = "0.5.6"
 
 [[TranscodingStreams]]
 deps = ["Random", "Test"]
