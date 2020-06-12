@@ -320,13 +320,21 @@ end
 
 function write_optimal_values(file::String, optimal_values::Dict)
     for k in keys(optimal_values)
-        open("$(file)$(string(k)).csv", "w") do io
-            if isa(optimal_values[k], String)
-                write(io, optimal_values[k], '\n')
-            else
-                writedlm(io, optimal_values[k])
-            end
+        if !isdir("$(file)")
+            mkdir("$(file)")
         end
+        if isa(optimal_values[k], String)
+            write("$(file)$(string(k)).csv", optimal_values[k], '\n')
+        else
+            writedlm("$(file)$(string(k)).csv", optimal_values[k])
+        end
+        # open("$(file)$(string(k)).csv", "w") do io
+        #     if isa(optimal_values[k], String)
+        #         write(io, optimal_values[k], '\n')
+        #     else
+        #         writedlm(io, optimal_values[k])
+        #     end
+        # end
     end
 end
 
