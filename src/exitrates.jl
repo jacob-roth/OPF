@@ -163,22 +163,39 @@ function compute_exitrate_exact_all_parallel(solution::Dict, opfmodeldata::Dict,
     prefactors = SharedVector{Float64}(length(lines))
     expterms = SharedVector{Float64}(length(lines))
     rates_kkt = SharedVector{Float64}(length(lines))
-    @sync for l in 1:length(lines)
-        function ratecalc()
-            exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
-            if exit_point !== nothing
-                rates_kkt[l] = exit_point[:prefactor] * exit_point[:expterm]
-            end
 
-            ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
-            if ep2 !== nothing
-                rates[l] = ep2[:prefactor] * ep2[:expterm]
-                prefactors[l] = ep2[:prefactor]
-                expterms[l] = ep2[:expterm]
-            end
+    function ratecalc(l)
+        exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
+        if exit_point !== nothing
+            rates_kkt[l] = exit_point[:prefactor] * exit_point[:expterm]
         end
-        @async @spawn ratecalc()
+
+        ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
+        if ep2 !== nothing
+            rates[l] = ep2[:prefactor] * ep2[:expterm]
+            prefactors[l] = ep2[:prefactor]
+            expterms[l] = ep2[:expterm]
+        end
     end
+    pmap(ratecalc, 1:length(lines))
+
+    # @sync for l in 1:length(lines)
+    #     function ratecalc()
+    #         exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
+    #         if exit_point !== nothing
+    #             rates_kkt[l] = exit_point[:prefactor] * exit_point[:expterm]
+    #         end
+    #
+    #         ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
+    #         if ep2 !== nothing
+    #             rates[l] = ep2[:prefactor] * ep2[:expterm]
+    #             prefactors[l] = ep2[:prefactor]
+    #             expterms[l] = ep2[:expterm]
+    #         end
+    #     end
+    #     @async @spawn ratecalc()
+    # end
+
     for l in eachindex(lines)
         @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(rates_kkt[l]/rates[l])))
     end
