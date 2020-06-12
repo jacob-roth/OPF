@@ -104,15 +104,25 @@ function compute_add_exitrates_parallel(solution::Dict, opfmodel::JuMP.Model, op
 
     ## compute the exit rate of lines in parallel
     exitrate = SharedVector{Float64}(length(lines))
-    @sync for l in lines_to_check
-        function ratecalc()
-            exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
-            if exit_point !== nothing
-                exitrate[l] = exit_point[:prefactor] * exit_point[:expterm]
-            end
+    #tot = length(lines_to_check)
+    function ratecalc(l)
+        exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
+        if exit_point !== nothing
+            exitrate[l] = exit_point[:prefactor] * exit_point[:expterm]
+            #println("$l/$tot = ", exitrate[l])
         end
-        @async @spawn ratecalc()
     end
+    pmap(ratecalc, lines_to_check)
+
+    # @sync for l in lines_to_check
+    #     function ratecalc()
+    #         exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
+    #         if exit_point !== nothing
+    #             exitrate[l] = exit_point[:prefactor] * exit_point[:expterm]
+    #         end
+    #     end
+    #     @async @spawn ratecalc()
+    # end
 
     ## re-compute the exit rates of violated lines (to get starting points)
     for l in lines_to_check
@@ -831,7 +841,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     # Set objective to minimize energy function
     #
     @NLobjective(em, Min,
-        -0.5*sum(Y[m,n]*Vm[m]*Vm[n]*cos(Va[m] - Va[n]) for m in 1:nbus for n in 1:nbus)
+        -0.5*sum(Y[m,n]*Vm[m]*Vm[n]*cos(Va[m] - Va[n]) for m in 1:nbus for n in 1:nbus if Y[m,n] != 0)
         - sum(xbar[:Pnet][m]*Va[m] + xbar[:Qnet][m]*log(Vm[m]) for m in 1:nbus))
 
     #
