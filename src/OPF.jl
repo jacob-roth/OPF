@@ -1,9 +1,9 @@
 module OPF
 using JuMP, JuMPUtil, Ipopt, MathProgBase
 using SparseArrays, LinearAlgebra, NLsolve, ForwardDiff
-using MatrixNetworks, StructArrays, Distributed ## for setting n-1 limits
+using MatrixNetworks, StructArrays, Distributed, SharedArrays ## for setting n-1 limits
 using MPCCases
-using Printf
+using Printf, DelimitedFiles
 using Pkg
 using Statistics
 using TimerOutputs
@@ -75,6 +75,11 @@ include("exitrates.jl")
 export acopf_solve_exitrates
 export compute_exitrate_kkt, compute_exitrate_exact
 export write_optimal_values, get_optimal_values
+export compute_add_exitrates_parallel, compute_add_exitrates_serial
+export compute_exitrate_exact_all_parallel, compute_exitrate_exact_all_serial
+
+include("operatingdata.jl")
+export get_operatingdata
 
 # include("acopf_n1_limits.jl")
 # export set_n1_limits!
