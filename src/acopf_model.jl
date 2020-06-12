@@ -1,4 +1,4 @@
-function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
+function OPF.acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
   #
   # model
   #
@@ -11,8 +11,15 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   @variable(opfmodel, opfmodeldata[:generators][i].Qmin <= Qg[i=1:ngen] <= opfmodeldata[:generators][i].Qmax)
   @variable(opfmodel, opfmodeldata[:buses][i].Vmin <= Vm[i=1:nbus] <= opfmodeldata[:buses][i].Vmax)
   @variable(opfmodel, -pi <= Va[i=1:nbus] <= pi)
-  @variable(opfmodel, 0 <= Ps[i=1:nbus] <= opfmodeldata[:buses][i].Pd) # real power shed
-  @variable(opfmodel, 0 <= Qs[i=1:nbus] <= opfmodeldata[:buses][i].Qd) # reactive power shed
+
+  ## option 1
+  # @variable(opfmodel, 0.0 <= Ps[i=1:nbus] <= abs(opfmodeldata[:buses][i].Pd)) # real power shed
+  # @variable(opfmodel, 0.0 <= Qs[i=1:nbus] <= abs(opfmodeldata[:buses][i].Qd)) # reactive power shed
+
+  ## option 2
+  @variable(opfmodel, -abs(opfmodeldata[:buses][i].Pd) <= Ps[i=1:nbus] <= abs(opfmodeldata[:buses][i].Pd)) # real power shed
+  @variable(opfmodel, -abs(opfmodeldata[:buses][i].Qd) <= Qs[i=1:nbus] <= abs(opfmodeldata[:buses][i].Qd)) # reactive power shed
+
 
   if options[:pw_angle_limits] == true
     for line in opfmodeldata[:lines]
@@ -39,7 +46,7 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
 
   ## objective
   if options[:shed_load]
-    @NLobjective(opfmodel, Min, sum(Ps[b] + Qs[b] for b in 1:nbus))
+    @NLobjective(opfmodel, Min, sum(Ps[b]^2 + Qs[b]^2 for b in 1:nbus))
   else
     setlowerbound.(Ps, 0); setupperbound.(Ps, 0)
     setlowerbound.(Qs, 0); setupperbound.(Qs, 0)
