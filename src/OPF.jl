@@ -76,7 +76,6 @@ export acopf_solve_exitrates
 export compute_exitrate_kkt, compute_exitrate_exact
 export write_optimal_values, get_optimal_values
 export compute_add_exitrates_parallel, compute_add_exitrates_serial
-export
 export compute_exitrate_exact_all_parallel, compute_exitrate_exact_all_serial
 
 # include("acopf_n1_limits.jl")
