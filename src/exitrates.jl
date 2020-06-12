@@ -715,10 +715,13 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
         # X = KDT, where T is as defined above,
         # to be less than 1.
         #
-        # However, even though X is a small kxk matrix where k = 2 or 3,
-        # it is nonsymmetric and there is no easy way to enforce this spectral constraint.
+        # However, even though X is a small kxk matrix, it is nonsymmetric
+        # and there is no easy way to enforce this spectral constraint in general.
         #
-        # There are 2 strategies:
+        # When k=2, this is equivalent to enforcing:
+        # tr(X) - det(X) <= 1
+        #
+        # When k=3, there are 2 strategies:
         #       (a) Implement a relaxed version of the constraint: tr(X) = sum of eigenvalues < k
         #       (b) Try and decompose hess h = LDL^T, where D > 0. However, this might not always be possible.
         #           In this case, we can replace the condition on X with that on (K*sqrt(D)*T*sqrt(D))
@@ -726,7 +729,14 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
         #
         # We adopt strategy (a) for simplicity
         #--------------------------------------------------------------------------------
-        @NLconstraint(opfmodel, sum(Kstar*D[m,m]*T[m,m] for m=1:ncol) <= ncol)
+        if ncol == 2
+            @NLconstraint(opfmodel, sum(Kstar*D[m,m]*T[m,m] for m=1:ncol) -
+                (Kstar^2*D[1,1]*D[2,2]*((T[1,1]*T[2,2]) - T[2,1]^2))
+                <= 1
+            )
+        else
+            @NLconstraint(opfmodel, sum(Kstar*D[m,m]*T[m,m] for m=1:ncol) <= ncol)
+        end
     end
     if options[:high_temp_adj]
         @NLconstraint(opfmodel,
@@ -928,7 +938,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     # --------------------
     # solve KKT system
     # --------------------
-    em = Model(solver = IpoptSolver(print_level=options[:print_level]))
+    em = Model(solver = IpoptSolver(print_level=options[:print_level],max_iter=1000))
 
     #
     # Variables
@@ -958,11 +968,21 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     #
     # Set objective function to be 2nd-order Taylor expansion
     #
-    Proj = compute_projection_matrix(nbus, nonLoadBuses, bus_ref)
-    A = Proj'*xbar[:hess_H]*Proj
-    @objective(em, Min, sum( ((Vm - VMbar)'*A[1:nbus,1:nbus]*(Vm - VMbar))
-                            +((Va - VAbar)'*A[nbus+1:2nbus,nbus+1:2nbus]*(Va - VAbar))
-                            +((Vm - VMbar)'*A[1:nbus,nbus+1:2nbus]*(Va - VAbar))))
+    lin_vm = opfmodeldata[:linindex_VMr]
+    lin_va = opfmodeldata[:linindex_VAr]
+    idx_vm = [n for n in 1:nbus if n ∉ nonLoadBuses]
+    idx_va = [n for n in 1:nbus if n != bus_ref]
+    @objective(em, Min,
+                    sum( xbar[:hess_H][lin_vm[a],lin_vm[b]]*(Vm[a] - VMbar[a])*(Vm[b] - VMbar[b])
+                            for a in idx_vm for b in idx_vm
+                                if xbar[:hess_H][lin_vm[a],lin_vm[b]] != 0) +
+                    sum( xbar[:hess_H][lin_va[a],lin_va[b]]*(Va[a] - VAbar[a])*(Va[b] - VAbar[b])
+                            for a in idx_va for b in idx_va
+                                if xbar[:hess_H][lin_va[a],lin_va[b]] != 0) +
+                    sum(2xbar[:hess_H][lin_vm[a],lin_va[b]]*(Vm[a] - VMbar[a])*(Va[b] - VAbar[b])
+                            for a in idx_vm for b in idx_va
+                                if xbar[:hess_H][lin_vm[a],lin_va[b]] != 0)
+    )
 
     #
     # initial value
@@ -1106,6 +1126,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
 
 
     inv_hess_H_times_L       = xbar[:hess_H] \ L
+    Proj                     = compute_projection_matrix(nbus, nonLoadBuses, bus_ref)
     Z_initial                = Proj' * inv_hess_H_times_L ## used in main optimization as an initial point
     X                        = -inv(D) + (Kstar*L'*inv_hess_H_times_L)
     L_times_xstar_minus_xbar = L'*xstar_minus_xbar
