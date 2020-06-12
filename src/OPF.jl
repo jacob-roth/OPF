@@ -78,6 +78,9 @@ export write_optimal_values, get_optimal_values
 export compute_add_exitrates_parallel, compute_add_exitrates_serial
 export compute_exitrate_exact_all_parallel, compute_exitrate_exact_all_serial
 
+include("operatingdata.jl")
+export get_operatingdata
+
 # include("acopf_n1_limits.jl")
 # export set_n1_limits!
 # export get_nonislanding_lines
