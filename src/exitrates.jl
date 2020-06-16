@@ -10,7 +10,6 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
     lines        = opfmodeldata[:lines]
     busIdx       = opfmodeldata[:BusIdx]
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
-    to = TimerOutput()
 
     ## solution vector
     solution = get_initial_point(opfmodel, opfdata, warm_point_given)
@@ -28,9 +27,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         set_initial_point!(opfmodel, solution)
 
         ## solve
-        @timeit to "solve nlp" begin
         status = solve(opfmodel)
-        end
         println("\nITER   = $(iter) ")
         println("STATUS = $(string(status))\n")
         println()
@@ -44,12 +41,10 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         ## loop over lines and check exit rates
         pl = deepcopy(options[:print_level])
         options[:print_level] = 0
-        @timeit to "check exit rates using KKT" begin
         if options[:parallel]
             updated = compute_add_exitrates_parallel(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
         else
             updated = compute_add_exitrates_serial(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
-        end
         end
         options[:print_level] = pl
 
@@ -77,15 +72,12 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
     ## Recompute all exitrates using exact calculation
     pl = deepcopy(options[:print_level])
     options[:print_level] = 0
-    @timeit to "check exit rates exact" begin
     if options[:parallel]
         compute_exitrate_exact_all_parallel(solution, opfmodeldata, options, other)
     else
         compute_exitrate_exact_all_serial(solution, opfmodeldata, options, other)
     end
-    end
     options[:print_level] = pl
-    show(to)
 
     return (opfmodel, status), other
 end
@@ -312,7 +304,7 @@ function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
 
     # Finally get energy function information
     solution[:H_xbar] =          H([solution[:Vmr]; solution[:Var]]; solution=solution, opfmodeldata=opfmodeldata)
-    solution[:grad_H] =         ∇H([solution[:Vmr]; solution[:Var]]; solution=solution, opfmodeldata=opfmodeldata)
+    solution[:grad_H] =  ∇H_direct([solution[:Vm];  solution[:Va]];  solution=solution, opfmodeldata=opfmodeldata)
     solution[:hess_H] = ∇2H_direct([solution[:Vm];  solution[:Va]];  solution=solution, opfmodeldata=opfmodeldata)
 
     return solution
@@ -363,8 +355,51 @@ function ∇2H(xr; solution, opfmodeldata)
     return ForwardDiff.hessian(g, xr)
 end
 
-## explicit calculation of the Hessian (since we know it anyway)
-function ∇2H_direct(A, xfullspace; solution, opfmodeldata)
+function h(xr; solution, opfmodeldata, i, j, flowmax)
+    Vm = xr[1:length(solution[:Vmr])]
+    Va = xr[length(solution[:Vmr])+1:end]
+    splice!(Va, opfmodeldata[:bus_ref]:opfmodeldata[:bus_ref]-1, solution[:Va][opfmodeldata[:bus_ref]])
+    for b in opfmodeldata[:nonLoadBuses]
+        splice!(Vm, b:b-1, solution[:Vm][b])
+    end
+    return 0.5*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax)
+end
+
+function ∇h(xr; solution, opfmodeldata, i, j, flowmax)
+    g = xr -> h(xr; solution=solution, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
+    return ForwardDiff.gradient(g, xr)
+end
+
+function ∇2h(xr; solution, opfmodeldata, i, j, flowmax)
+    g = xr -> h(xr; solution=solution, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
+    return ForwardDiff.hessian(g, xr)
+end
+
+## -----------------------------------------------------------------------------
+## Explicit/direct gradient and Hessian calculations
+## -----------------------------------------------------------------------------
+function ∇H_direct(xfullspace; solution, opfmodeldata)
+    g = zeros(opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1)
+    VM = xfullspace[1:opfmodeldata[:nbus]]
+    VA = xfullspace[opfmodeldata[:nbus]+1:2opfmodeldata[:nbus]]
+    for n in 1:opfmodeldata[:nbus]
+        nv = opfmodeldata[:linindex_VMr][n]
+        nθ = opfmodeldata[:linindex_VAr][n]
+        if nv > 0
+            g[nv] = -(+(VM[n]*opfmodeldata[:Y][n,n])
+                      +reduce(+, opfmodeldata[:Y][n,k]*VM[k]*cos(VA[n] - VA[k]) for k in 1:opfmodeldata[:nbus] if k != n && opfmodeldata[:Y][n,k] != 0)
+                      +(solution[:Qnet][n]/VM[n]))
+        end
+        if nθ > 0
+            g[nθ] = -solution[:Pnet][n]+reduce(+, opfmodeldata[:Y][n,k]*VM[n]*VM[k]*sin(VA[n] - VA[k]) for k in 1:opfmodeldata[:nbus] if k != n && opfmodeldata[:Y][n,k] != 0)
+        end
+    end
+    return g
+end
+
+function ∇2H_direct_old(xfullspace; solution, opfmodeldata)
+    #A = Array{typeof(zero(xfullspace[1])), 2}(undef, opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1, opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1);
+    A = zeros(opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1, opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1)
     VM = xfullspace[1:opfmodeldata[:nbus]]
     VA = xfullspace[opfmodeldata[:nbus]+1:2opfmodeldata[:nbus]]
     i, j = 0, 0
@@ -394,35 +429,98 @@ function ∇2H_direct(A, xfullspace; solution, opfmodeldata)
                                  (-opfmodeldata[:Y][n,b] * VM[n] * VM[b] * cos(VA[n] - VA[b]))
         end
     end
-end
-
-function ∇2H_direct(xfullspace; solution, opfmodeldata)
-    A = Array{typeof(zero(xfullspace[1])), 2}(undef, opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1, opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1);
-    ∇2H_direct(A, xfullspace; solution=solution, opfmodeldata=opfmodeldata)
     A = Symmetric(A)
     return A
 end
 
-function h(xr; solution, opfmodeldata, i, j, flowmax)
-    Vm = xr[1:length(solution[:Vmr])]
-    Va = xr[length(solution[:Vmr])+1:end]
-    splice!(Va, opfmodeldata[:bus_ref]:opfmodeldata[:bus_ref]-1, solution[:Va][opfmodeldata[:bus_ref]])
-    for b in opfmodeldata[:nonLoadBuses]
-        splice!(Vm, b:b-1, solution[:Vm][b])
+function ∇2H_direct(xfullspace; solution, opfmodeldata)
+    #A = Array{typeof(zero(xfullspace[1])), 2}(undef, opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1, opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1);
+    A = zeros(opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1, opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1)
+    VM = xfullspace[1:opfmodeldata[:nbus]]
+    VA = xfullspace[opfmodeldata[:nbus]+1:2opfmodeldata[:nbus]]
+    for n in 1:opfmodeldata[:nbus]
+        nv = opfmodeldata[:linindex_VMr][n]
+        nθ = opfmodeldata[:linindex_VAr][n]
+        if nv > 0
+            A[nv,nv] = -opfmodeldata[:Y][n,n] + (solution[:Qnet][n] / VM[n]^2)
+            A[nv,nθ] = reduce(+, opfmodeldata[:Y][n,k]*VM[k]*sin(VA[n] - VA[k]) for k in 1:opfmodeldata[:nbus] if opfmodeldata[:Y][n,k] != 0)
+        end
+        if nθ > 0
+            A[nθ,nθ] = reduce(+, VM[k]*VM[n]*opfmodeldata[:Y][n,k]*cos(VA[n] - VA[k]) for k in 1:opfmodeldata[:nbus] if k != n && opfmodeldata[:Y][n,k] != 0)
+            for b in 1:opfmodeldata[:nbus]
+                bv = opfmodeldata[:linindex_VMr][b]
+                bθ = opfmodeldata[:linindex_VAr][b]
+                if opfmodeldata[:Y][n,b] != 0
+                    if nv > 0 && bv > 0 && b > n
+                        A[nv,bv] = -opfmodeldata[:Y][n,b] * cos(VA[n] - VA[b])
+                    end
+                    if nv > 0 && bθ > 0 && b != n
+                        A[nv,bθ] = -opfmodeldata[:Y][n,b] * VM[b] * sin(VA[n] - VA[b])
+                    end
+                    if bθ > 0 && b > n
+                        A[nθ,bθ] = -opfmodeldata[:Y][n,b] * VM[n] * VM[b] * cos(VA[n] - VA[b])
+                    end
+                end
+            end
+        end
     end
-    return 0.5*(Vm[i]^2 + Vm[j]^2 - (2*Vm[i]*Vm[j]*cos(Va[i]-Va[j])) - flowmax)
+    A = Symmetric(A)
+    return A
 end
 
-function ∇h(xr; solution, opfmodeldata, i, j, flowmax)
-    g = xr -> h(xr; solution=solution, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
-    return ForwardDiff.gradient(g, xr)
+function ∇h_direct(xfullspace; solution, opfmodeldata, i, j, flowmax)
+    g = zeros(opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1)
+    a = opfmodeldata[:linindex_VMr][i]
+    b = opfmodeldata[:linindex_VMr][j]
+    c = opfmodeldata[:linindex_VAr][i]
+    d = opfmodeldata[:linindex_VAr][j]
+    VM = xfullspace[1:opfmodeldata[:nbus]]
+    VA = xfullspace[opfmodeldata[:nbus]+1:2opfmodeldata[:nbus]]
+    (a > 0) && (g[a] = +VM[i] - (VM[j]*cos(VA[i] - VA[j])))
+    (b > 0) && (g[b] = +VM[j] - (VM[i]*cos(VA[i] - VA[j])))
+    (c > 0) && (g[c] = +VM[i]*VM[j]*sin(VA[i] - VA[j]))
+    (d > 0) && (g[d] = -VM[i]*VM[j]*sin(VA[i] - VA[j]))
+    return g
 end
 
-function ∇2h(xr; solution, opfmodeldata, i, j, flowmax)
-    g = xr -> h(xr; solution=solution, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
-    return ForwardDiff.hessian(g, xr)
+function ∇2h_direct(xfullspace; solution, opfmodeldata, i, j, flowmax)
+    A = zeros(opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1, opfmodeldata[:nloads] + opfmodeldata[:nbus] - 1);
+    a = opfmodeldata[:linindex_VMr][i]
+    b = opfmodeldata[:linindex_VMr][j]
+    c = opfmodeldata[:linindex_VAr][i]
+    d = opfmodeldata[:linindex_VAr][j]
+    VM = xfullspace[1:opfmodeldata[:nbus]]
+    VA = xfullspace[opfmodeldata[:nbus]+1:2opfmodeldata[:nbus]]
+    (a > 0) && (A[a,a] = 1)
+    (b > 0) && (A[b,b] = 1)
+    (c > 0) && (A[c,c] = VM[i]*VM[j]*cos(VA[i] - VA[j]))
+    (d > 0) && (A[d,d] = VM[i]*VM[j]*cos(VA[i] - VA[j]))
+    if a > 0 && b > 0
+        A[a,b] = -cos(VA[i] - VA[j])
+        A[b,a] = A[a,b]
+    end
+    if a > 0 && c > 0
+        A[a,c] = VM[j]*sin(VA[i] - VA[j])
+        A[c,a] = A[a,c]
+    end
+    if a > 0 && d > 0
+        A[a,d] = -VM[j]*sin(VA[i] - VA[j])
+        A[d,a] = A[a,d]
+    end
+    if b > 0 && c > 0
+        A[b,c] = VM[i]*sin(VA[i] - VA[j])
+        A[c,b] = A[b,c]
+    end
+    if b > 0 && d > 0
+        A[b,d] = -VM[i]*sin(VA[i] - VA[j])
+        A[d,b] = A[b,d]
+    end
+    if c > 0 && d > 0
+        A[c,d] = -VM[i]*VM[j]*cos(VA[i] - VA[j])
+        A[d,c] = A[c,d]
+    end
+    return A
 end
-
 
 ## -----------------------------------------------------------------------------
 ## Main constraints
@@ -902,17 +1000,16 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     ##
 
     H_xstar      =          H([VMstar_r; VAstar_r]; solution=exit_point, opfmodeldata=opfmodeldata)
-    grad_H_xstar =         ∇H([VMstar_r; VAstar_r]; solution=exit_point, opfmodeldata=opfmodeldata)
+    grad_H_xstar =  ∇H_direct([VMstar  ; VAstar  ]; solution=exit_point, opfmodeldata=opfmodeldata)
     hess_H_xstar = ∇2H_direct([VMstar  ; VAstar  ]; solution=exit_point, opfmodeldata=opfmodeldata)
-    grad_h_xstar =         ∇h([VMstar_r; VAstar_r]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
-    hess_h_xstar =        ∇2h([VMstar_r; VAstar_r]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
-    hess_h_xstar = 0.5 * (hess_h_xstar + hess_h_xstar') # Make the Hessian symmetric
+    grad_h_xstar =  ∇h_direct([VMstar  ; VAstar  ]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
+    hess_h_xstar = ∇2h_direct([VMstar  ; VAstar  ]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
 
 
     # calculate rate
     Kstar      = norm(grad_H_xstar) / norm(grad_h_xstar)
     tempM      = hess_H_xstar - (Kstar * hess_h_xstar)
-    z1         = det(xbar[:hess_H])/det(tempM)
+    z1         = exp(logabsdet(xbar[:hess_H])[1] - logabsdet(tempM)[1])
     z2         = grad_H_xstar' * (tempM\grad_H_xstar)
     z3         = sqrt(abs(z1/z2))
     kappa      = Kstar^3/z3
@@ -1098,7 +1195,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     #
     # Calculate constraint gradient
     #
-    grad_h = ∇h([VMstar_r; VAstar_r]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
+    grad_h = ∇h_direct([VMstar; VAstar]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
     xstar_minus_xbar_times_grad_h = xstar_minus_xbar'*grad_h
 
     #
@@ -1149,8 +1246,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
         ((b > 0 ? S[b] : 0.0)*( VMstar[j]-(VMstar[i]*cos(VAstar[i] - VAstar[j])))^2) +
         ((c > 0 ? S[c] : 0.0)*( VMstar[i]* VMstar[j]*sin(VAstar[i] - VAstar[j]))^2) +
         ((d > 0 ? S[d] : 0.0)*(-VMstar[i]* VMstar[j]*sin(VAstar[i] - VAstar[j]))^2)
-    hess_h = ∇2h([VMstar_r; VAstar_r]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
-    hess_h = 0.5*(hess_h + hess_h')
+    hess_h = ∇2h_direct([VMstar; VAstar]; solution=exit_point, opfmodeldata=opfmodeldata, i=i, j=j, flowmax=flowmax)
     @assert maximum(abs.((L*D*L') - hess_h)) <= 1e-8
     @assert abs(norm_squared_grad_h_check - norm(grad_h)^2) <= 1e-8
     @assert abs(norm_squared_grad_h_weighted_S_check - sum(S.*grad_h.^2)) <= 1e-8
