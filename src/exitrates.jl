@@ -895,7 +895,7 @@ end
 ## -----------------------------------------------------------------------------
 ## transition rate calculations
 ## -----------------------------------------------------------------------------
-function OPF.compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options::Dict)
+function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options::Dict)
     @assert options[:lossless]
     @assert options[:current_rating]
 
