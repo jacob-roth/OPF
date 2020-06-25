@@ -164,12 +164,12 @@ function compute_exitrate_exact_all_parallel(solution::Dict, opfmodeldata::Dict,
     rates = SharedVector{Float64}(length(lines))
     prefactors = SharedVector{Float64}(length(lines))
     expterms = SharedVector{Float64}(length(lines))
-    rates_kkt = SharedVector{Float64}(length(lines))
+    kktrates = SharedVector{Float64}(length(lines))
 
     function ratecalc(l)
         exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
         if exit_point !== nothing
-            rates_kkt[l] = exit_point[:prefactor] * exit_point[:expterm]
+            kktrates[l] = exit_point[:prefactor] * exit_point[:expterm]
         end
 
         ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
@@ -199,9 +199,9 @@ function compute_exitrate_exact_all_parallel(solution::Dict, opfmodeldata::Dict,
     # end
 
     for l in eachindex(lines)
-        @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(rates_kkt[l]/rates[l])))
+        @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(kktrates[l]/rates[l])))
     end
-
+    result[:kktrates] = kktrates
     result[:rates] = rates
     result[:prefactors] = prefactors
     result[:expterms] = expterms
@@ -209,6 +209,7 @@ end
 
 function compute_exitrate_exact_all_serial(solution::Dict, opfmodeldata::Dict, options::Dict, result::Dict)
     lines = opfmodeldata[:lines]
+    kktrates = zeros(length(lines))
     rates = zeros(length(lines))
     prefactors = zeros(length(lines))
     expterms = zeros(length(lines))
@@ -216,6 +217,7 @@ function compute_exitrate_exact_all_serial(solution::Dict, opfmodeldata::Dict, o
         exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
         (exit_point == nothing) && continue
         exitrate = exit_point[:prefactor] * exit_point[:expterm]
+        kktrates[l] = exitrate
 
         ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
         if ep2 != nothing
@@ -225,7 +227,7 @@ function compute_exitrate_exact_all_serial(solution::Dict, opfmodeldata::Dict, o
             @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(exitrate/rates[l])))
         end
     end
-
+    result[:kktrates] = kktrates
     result[:rates] = rates
     result[:prefactors] = prefactors
     result[:expterms] = expterms
@@ -893,7 +895,7 @@ end
 ## -----------------------------------------------------------------------------
 ## transition rate calculations
 ## -----------------------------------------------------------------------------
-function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options::Dict)
+function OPF.compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options::Dict)
     @assert options[:lossless]
     @assert options[:current_rating]
 
@@ -907,6 +909,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     i            = opfmodeldata[:BusIdx][line.from]
     j            = opfmodeldata[:BusIdx][line.to]
     flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0 / line.x)))
+    println("flowmax!", flowmax)
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
