@@ -33,7 +33,7 @@ function DefaultOptions()
   D[:constr_limit_scale] = 1.2 ## line limits will be multiplied by this factor
   D[:shed_load]      = true    ## shed load?
   D[:ratelimit]      = 10.0    ## max upper bound on the transition rates
-  D[:iterlim]        = 1e9     ## max number of rounds of adding constraints
+  D[:iterlim]        = Int(1e9)     ## max number of rounds of adding constraints
   D[:VOLL]           = Inf     ## Value of lost load (can be Inf)
   D[:psd_constraint] = false   ## Enforce convexity of KKT subproblem
   D[:high_temp_adj]  = false   ## High temperature adjustment to prefactor
