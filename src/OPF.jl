@@ -47,7 +47,7 @@ export set_n1_limits!, get_acopf_point, get_scacopf_point, get_contingency_point
 
 include("util.jl")
 export acopf_solve, acopf_initialPt_IPOPT
-export acopf_outputAll, get_values
+export acopf_outputAll
 export scacopf_solve
 export RGL_id, RGL_idx, model_idx
 export PQnet
@@ -60,7 +60,7 @@ export get_islanding_buses, get_islanding_buses, get_nonislanding_contingencies
 include("pfe.jl")
 export P_i, Q_i
 export PF, PFE, PFE!, PFE_J!
-export PF_vec, PFE_vec, PFE_vec!
+export PF_vec, PFE_vec
 
 include("jacobian.jl")
 export jac_z_num
