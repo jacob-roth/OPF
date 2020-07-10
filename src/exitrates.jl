@@ -10,6 +10,8 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
     lines        = opfmodeldata[:lines]
     busIdx       = opfmodeldata[:BusIdx]
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
+    opfmodel.objDict[:solvetime] = NaN
+    opfmodel.objDict[:objvalue] = NaN
 
     ## solution vector
     solution = get_initial_point(opfmodel, opfdata, warm_point_given)
@@ -70,6 +72,10 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         end
     end
     other[:objvalue] = getobjectivevalue(opfmodel)
+    opfmodel.objDict[:solvetime] = other[:solvetime]
+    opfmodel.objDict[:objvalue]  = other[:objvalue]
+    println("objDict time: ", opfmodel.objDict[:solvetime])
+    println("objDict obj : ", opfmodel.objDict[:objvalue])
     # solution[:objvalue] = other[:objvalue]
     # solution[:solvetime] = other[:solvetime]
 
@@ -88,6 +94,10 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
 end
 function acopf_solve_exitrates(M, casedata, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)
     opfm, status, other = acopf_solve_exitrates(M.m, casedata, options, adjustments, warm_point_given, M.other)
+    println("objDict time: ", opfm.objDict[:solvetime])
+    println("objDict obj : ", opfm.objDict[:objvalue])
+    println("other time: ", other[:solvetime])
+    println("other obj : ", other[:objvalue])
     return OPFModel(opfm, status, M.kind, other)
 end
 
