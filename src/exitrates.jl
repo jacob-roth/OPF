@@ -914,7 +914,6 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     i            = opfmodeldata[:BusIdx][line.from]
     j            = opfmodeldata[:BusIdx][line.to]
     flowmax      = options[:constr_limit_scale]*(line.rateA^2 / (opfmodeldata[:baseMVA]^2 * abs2(1.0 / line.x)))
-    println("flowmax!", flowmax)
     nbus         = length(buses)
     nrow         = 2nbus - length(nonLoadBuses) - 1
     VMbar        = xbar[:Vm]
