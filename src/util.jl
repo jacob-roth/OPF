@@ -23,14 +23,20 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   # setvalue(getindex(opfmodel, :lc), lc.flowmag2)
 
   status = :IpoptInit
-  status = solve(opfmodel)
+  solvetime = @elapsed status = solve(opfmodel)
+  opfmodel.objDict[:solvetime] = solvetime
+  opfmodel.objDict[:objvalue] = getobjectivevalue(opfmodel)
 
   if status != :Optimal
     println("Could not solve the model to optimality.")
   end
   return opfmodel, status
 end
-function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false); return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind, M.other); end
+function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false)
+  M.other[:solvetime] = opfmodel.objDict[:solvetime]
+  M.other[:objvalue] = opfmodel.objDict[:objvalue]
+  return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind, M.other)
+end
 
 function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
 
@@ -38,14 +44,20 @@ function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   # initial point - assumed to be accounted for in `opfmodel`
   #
   status = :IpoptInit
-  status = solve(opfmodel)
+  solvetime = @elapsed status = solve(opfmodel)
+  M.other[:solvetime] = opfmodel.objDict[:solvetime]
+  M.other[:objvalue] = opfmodel.objDict[:objvalue]
 
   if status != :Optimal
     println("Could not solve the model to optimality.")
   end
   return opfmodel, status
 end
-function acpf_solve(M::OPFModel, opfdata::OPFData); return OPFModel(acpf_solve(M.m, opfdata)..., M.kind, M.other); end
+function acpf_solve(M::OPFModel, opfdata::OPFData)
+  M.other[:solvetime] = opfmodel.objDict[:solvetime]
+  M.other[:objvalue] = opfmodel.objDict[:objvalue]
+  return OPFModel(acpf_solve(M.m, opfdata)..., M.kind, M.other)
+end
 
 function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, contingencies::Dict=Dict(), warm_point=false, current_rating_bool::Bool=true)
     options[:current_rating] = current_rating_bool
@@ -95,7 +107,9 @@ function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, co
     end
 
     status = :IpoptInit
-    status = solve(opfmodel)
+    solvetime = @elapsed (status = solve(opfmodel))
+    opfmodel.objDict[:solvetime] = solvetime
+    opfmodel.objDict[:objvalue] = getobjectivevalue(opfmodel)
 
     if status != :Optimal
         println("Could not solve the model to optimality.")
@@ -103,7 +117,11 @@ function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, co
     return opfmodel, status
 end
 
-function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false); return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind, M.other); end
+function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false);
+  M.other[:solvetime] = opfmodel.objDict[:solvetime]
+  M.other[:objvalue] = opfmodel.objDict[:objvalue]
+  return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind, M.other)
+end
 
 # Compute initial point for IPOPT based on the values provided in the case data
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData)

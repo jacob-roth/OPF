@@ -35,8 +35,8 @@ function DefaultOptions()
   D[:ratelimit]      = 10.0    ## max upper bound on the transition rates
   D[:iterlim]        = Int(1e9)     ## max number of rounds of adding constraints
   D[:VOLL]           = Inf     ## Value of lost load (can be Inf)
-  D[:psd_constraint] = false   ## Enforce convexity of KKT subproblem
-  D[:high_temp_adj]  = false   ## High temperature adjustment to prefactor
+  D[:psd_constraint] = true    ## Enforce convexity of KKT subproblem
+  D[:high_temp_adj]  = true    ## High temperature adjustment to prefactor
   D[:slack0]         = true    ## fix slack reference angle to be zero
   D[:pw_angle_limits]= false   ## pairwise angle difference constraints
   D[:ramp_pct]       = 0.1     ## |Pg - Pg_contingency| <= ramp_pct * Pg_max

@@ -14,60 +14,62 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
     ## solution vector
     solution = get_initial_point(opfmodel, opfdata, warm_point_given)
 
+    other[:solvetime] = @elapsed begin
+        ## Start
+        iter = 0
+        status = :IpoptInit
+        minimize_cost = !options[:shed_load]
+        lines_with_added_rate_constraints = Set{Int}()
+        while iter < options[:iterlim]
+            iter += 1
 
-    ## Start
-    iter = 0
-    status = :IpoptInit
-    minimize_cost = !options[:shed_load]
-    lines_with_added_rate_constraints = Set{Int}()
-    while iter < options[:iterlim]
-        iter += 1
+            ## set initial point
+            set_initial_point!(opfmodel, solution)
 
-        ## set initial point
-        set_initial_point!(opfmodel, solution)
+            ## solve
+            status = solve(opfmodel)
+            println("\nITER   = $(iter) ")
+            println("STATUS = $(string(status))\n")
+            println()
+            if status != :Optimal
+                break
+            end
 
-        ## solve
-        status = solve(opfmodel)
-        println("\nITER   = $(iter) ")
-        println("STATUS = $(string(status))\n")
-        println()
-        if status != :Optimal
-            break
-        end
+            ## Get optimal values
+            solution = get_optimal_values(opfmodel, opfmodeldata)
 
-        ## Get optimal values
-        solution = get_optimal_values(opfmodel, opfmodeldata)
-
-        ## loop over lines and check exit rates
-        pl = deepcopy(options[:print_level])
-        options[:print_level] = 0
-        if options[:parallel]
-            updated = compute_add_exitrates_parallel(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
-        else
-            updated = compute_add_exitrates_serial(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
-        end
-        options[:print_level] = pl
-
-        ## Fix load shedding and change objective to minimizing cost
-        if !updated
-            minimize_cost && break
-            minimize_cost = true
-            if isinf(options[:VOLL])
-                setlowerbound.(opfmodel[:Ps], solution[:Ps])
-                setupperbound.(opfmodel[:Ps], solution[:Ps])
-                setlowerbound.(opfmodel[:Qs], solution[:Qs])
-                setupperbound.(opfmodel[:Qs], solution[:Qs])
-                @NLobjective(opfmodel, Min, sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
-                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
-                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators])))
+            ## loop over lines and check exit rates
+            pl = deepcopy(options[:print_level])
+            options[:print_level] = 0
+            if options[:parallel]
+                updated = compute_add_exitrates_parallel(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
             else
-                @NLobjective(opfmodel, Min, (sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
-                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
-                                            +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators]))/options[:VOLL]) +
-                                            sum((opfmodel[:Ps][b]+opfmodel[:Qs][b]) for b in 1:opfmodeldata[:nbus]))
+                updated = compute_add_exitrates_serial(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
+            end
+            options[:print_level] = pl
+
+            ## Fix load shedding and change objective to minimizing cost
+            if !updated
+                minimize_cost && break
+                minimize_cost = true
+                if isinf(options[:VOLL])
+                    setlowerbound.(opfmodel[:Ps], solution[:Ps])
+                    setupperbound.(opfmodel[:Ps], solution[:Ps])
+                    setlowerbound.(opfmodel[:Qs], solution[:Qs])
+                    setupperbound.(opfmodel[:Qs], solution[:Qs])
+                    @NLobjective(opfmodel, Min, sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
+                                                +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
+                                                +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators])))
+                else
+                    @NLobjective(opfmodel, Min, (sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
+                                                +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
+                                                +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators]))/options[:VOLL]) +
+                                                sum((opfmodel[:Ps][b]+opfmodel[:Qs][b]) for b in 1:opfmodeldata[:nbus]))
+                end
             end
         end
     end
+    other[:objvalue] = getobjectivevalue(opfmodel)
 
     ## Recompute all exitrates using exact calculation
     pl = deepcopy(options[:print_level])
