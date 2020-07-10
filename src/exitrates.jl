@@ -70,8 +70,8 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         end
     end
     other[:objvalue] = getobjectivevalue(opfmodel)
-    solution[:objvalue] = other[:objvalue]
-    solution[:solvetime] = other[:solvetime]
+    # solution[:objvalue] = other[:objvalue]
+    # solution[:solvetime] = other[:solvetime]
 
 
     ## Recompute all exitrates using exact calculation
@@ -84,11 +84,11 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
     end
     options[:print_level] = pl
 
-    return (opfmodel, status), other
+    return opfmodel, status, other
 end
 function acopf_solve_exitrates(M, casedata, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)
-    opfm = acopf_solve_exitrates(M.m, casedata, options, adjustments, warm_point_given, M.other)
-    return OPFModel(opfm[1]..., M.kind, M.other)
+    opfm, status, other = acopf_solve_exitrates(M.m, casedata, options, adjustments, warm_point_given, M.other)
+    return OPFModel(opfm, status, M.kind, other)
 end
 
 ## -----------------------------------------------------------------------------
@@ -313,6 +313,10 @@ function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
     solution[:H_xbar] =          H([solution[:Vmr]; solution[:Var]]; solution=solution, opfmodeldata=opfmodeldata)
     solution[:grad_H] =  ∇H_direct([solution[:Vm];  solution[:Va]];  solution=solution, opfmodeldata=opfmodeldata)
     solution[:hess_H] = ∇2H_direct([solution[:Vm];  solution[:Va]];  solution=solution, opfmodeldata=opfmodeldata)
+
+    # solve time
+    solution[:solvetime] = opfmodel.objDict[:solvetime]
+    solution[:objvalue]  = opfmodel.objDict[:objvalue]
 
     return solution
 end

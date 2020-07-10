@@ -33,9 +33,11 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   return opfmodel, status
 end
 function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false)
-  M.other[:solvetime] = M.m.objDict[:solvetime]
-  M.other[:objvalue] = M.m.objDict[:objvalue]
-  return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind, M.other)
+  opfmodel = M.m
+  opfmodel, status = acopf_solve(opfmodel, opfdata, warm_point)
+  M.other[:solvetime] = opfmodel.objDict[:solvetime]
+  M.other[:objvalue]  = opfmodel.objDict[:objvalue]
+  return OPFModel(opfmodel, status, M.kind, M.other)
 end
 
 function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
@@ -54,9 +56,11 @@ function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   return opfmodel, status
 end
 function acpf_solve(M::OPFModel, opfdata::OPFData)
+  opfmodel = M.m
+  opfmodel, status = acpf_solve(opfmodel, opfdata)
   M.other[:solvetime] = opfmodel.objDict[:solvetime]
-  M.other[:objvalue] = opfmodel.objDict[:objvalue]
-  return OPFModel(acpf_solve(M.m, opfdata)..., M.kind, M.other)
+  M.other[:objvalue]  = opfmodel.objDict[:objvalue]
+  return OPFModel(opfmodel, status, M.kind, M.other)
 end
 
 function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, contingencies::Dict=Dict(), warm_point=false, current_rating_bool::Bool=true)
@@ -118,9 +122,11 @@ function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, co
 end
 
 function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false);
-  M.other[:solvetime] = M.m.objDict[:solvetime]
-  M.other[:objvalue] = M.m.objDict[:objvalue]
-  return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind, M.other)
+  opfmodel = M.m
+  opfmodel, status = scacopf_solve(opfmodel, opfdata, options, contingencies, warm_point)
+  M.other[:solvetime] = opfmodel.objDict[:solvetime]
+  M.other[:objvalue]  = opfmodel.objDict[:objvalue]
+  return OPFModel(opfmodel, status, M.kind, M.other)
 end
 
 # Compute initial point for IPOPT based on the values provided in the case data
