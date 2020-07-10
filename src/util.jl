@@ -33,8 +33,8 @@ function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   return opfmodel, status
 end
 function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false)
-  M.other[:solvetime] = opfmodel.objDict[:solvetime]
-  M.other[:objvalue] = opfmodel.objDict[:objvalue]
+  M.other[:solvetime] = M.m.objDict[:solvetime]
+  M.other[:objvalue] = M.m.objDict[:objvalue]
   return OPFModel(acopf_solve(M.m, opfdata, warm_point)..., M.kind, M.other)
 end
 
@@ -118,8 +118,8 @@ function scacopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, options::Dict, co
 end
 
 function scacopf_solve(M::OPFModel, opfdata::OPFData, options::Dict, contingencies, warm_point=false);
-  M.other[:solvetime] = opfmodel.objDict[:solvetime]
-  M.other[:objvalue] = opfmodel.objDict[:objvalue]
+  M.other[:solvetime] = M.m.objDict[:solvetime]
+  M.other[:objvalue] = M.m.objDict[:objvalue]
   return OPFModel(scacopf_solve(M.m, opfdata, options, contingencies::Dict, warm_point)..., M.kind, M.other)
 end
 
