@@ -70,6 +70,9 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         end
     end
     other[:objvalue] = getobjectivevalue(opfmodel)
+    solution[:objvalue] = other[:objvalue]
+    solution[:solvetime] = other[:solvetime]
+
 
     ## Recompute all exitrates using exact calculation
     pl = deepcopy(options[:print_level])
