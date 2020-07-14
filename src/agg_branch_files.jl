@@ -1,3 +1,5 @@
+# Aggregate multiple branch files
+
 function write_new_limits(read_file_path::String, file_name::String, opfdata::OPFData; overwrite_file::Bool=false, write_file_path::String="")
     rateA = opfdata.lines.rateA
     branch_file = complete_file_path(read_file_path) * file_name * ".branch"
