@@ -51,7 +51,6 @@ export set_n1_limits!, get_acopf_point, get_scacopf_point, get_contingency_point
 include("util.jl")
 export acopf_solve, acopf_initialPt_IPOPT
 export acopf_outputAll
-export acpf_solve
 export scacopf_solve
 export RGL_id, RGL_idx, model_idx
 export PQnet
