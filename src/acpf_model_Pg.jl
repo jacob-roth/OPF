@@ -92,7 +92,7 @@ function acpf_model(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=Defa
   end
   
   function acpf_model(opfdata::OPFData, Pg_file_path:: String, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
-    Pg_arr = readdlm(Pg_file_path)
+    Pg_arr = vec(readdlm(Pg_file_path))
     return acpf_model(opfdata, Pg_arr, options, adjustments)
   end
   
