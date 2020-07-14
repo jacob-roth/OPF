@@ -67,7 +67,7 @@ function acopf_solve_Pg(opfmodel::JuMP.Model, opfdata::OPFData, Pg_arr::Vector{<
 end
 function acopf_solve_Pg(M::OPFModel, opfdata::OPFData, Pg_arr::Vector{<:Real})
   opfmodel = M.m
-  opfmodel, status = acopf_solve(opfmodel, opfdata, Pg_arr)
+  opfmodel, status = acopf_solve_Pg(opfmodel, opfdata, Pg_arr)
   M.other[:solvetime] = opfmodel.objDict[:solvetime]
   M.other[:objvalue]  = opfmodel.objDict[:objvalue]
   return OPFModel(opfmodel, status, M.kind, M.other)
