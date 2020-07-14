@@ -40,7 +40,7 @@ function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false)
   return OPFModel(opfmodel, status, M.kind, M.other)
 end
 
-function acopf_solve(opfmodel::JuMP.Model, opfdata::OPFData, Pg_arr::Vector{<:Real})
+function acopf_solve_Pg(opfmodel::JuMP.Model, opfdata::OPFData, Pg_arr::Vector{<:Real})
 
   #
   # initial point - needed especially for pegase cases
