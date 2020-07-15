@@ -27,8 +27,8 @@ export add_line_current_constraint!, add_line_power_constraint!
 include("acpf_model.jl")
 export acpf_model
 
-include("acpf_model_Pg.jl")
-export acpf_model
+include("acopf_model_Pg.jl")
+export acopf_model_Pg
 
 include("acopf_model.jl")
 export acopf_model

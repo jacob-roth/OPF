@@ -1,4 +1,4 @@
-function acpf_model(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
+function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
     #
     # model
     #
@@ -8,10 +8,15 @@ function acpf_model(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=Defa
     nbus = length(opfmodeldata[:buses]); nline = length(opfmodeldata[:lines]); ngen = length(opfmodeldata[:generators])
   
     ## bound constrained variables
-    @variable(opfmodel, Pg_arr[i] <= Pg[i=1:ngen] <= Pg_arr[i])
+    @variable(opfmodel, opfmodeldata[:generators][i].Pmin <= Pg[i=1:ngen] <= opfmodeldata[:generators][i].Pmax)
     @variable(opfmodel, opfmodeldata[:generators][i].Qmin <= Qg[i=1:ngen] <= opfmodeldata[:generators][i].Qmax)
     @variable(opfmodel, opfmodeldata[:buses][i].Vmin <= Vm[i=1:nbus] <= opfmodeldata[:buses][i].Vmax)
     @variable(opfmodel, -pi <= Va[i=1:nbus] <= pi)
+
+    for i in 1:ngen
+      setlowerbound(Pg[i], Pg_arr[i])
+      setupperbound(Pg[i], Pg_arr[i])
+    end
   
     ## option 1
     # @variable(opfmodel, 0.0 <= Ps[i=1:nbus] <= abs(opfmodeldata[:buses][i].Pd)) # real power shed
@@ -91,8 +96,8 @@ function acpf_model(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=Defa
     return OPFModel(opfmodel, :InitData, :D, Dict())
   end
   
-  function acpf_model(opfdata::OPFData, Pg_file_path:: String, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
+  function acopf_model_Pg(opfdata::OPFData, Pg_file_path:: String, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
     Pg_arr = vec(readdlm(Pg_file_path))
-    return acpf_model(opfdata, Pg_arr, options, adjustments)
+    return acopf_model_Pg(opfdata, Pg_arr, options, adjustments)
   end
   
