@@ -40,6 +40,39 @@ function acopf_solve(M::OPFModel, opfdata::OPFData, warm_point=false)
   return OPFModel(opfmodel, status, M.kind, M.other)
 end
 
+function acopf_solve_Pg(opfmodel::JuMP.Model, opfdata::OPFData, Pg_arr::Vector{<:Real})
+
+  #
+  # initial point - needed especially for pegase cases
+  #
+  Pg0,Qg0,Vm0,Va0 = acopf_initialPt_IPOPT(opfdata, Pg_arr)
+  
+  setvalue(getindex(opfmodel, :Pg), Pg0)
+  setvalue(getindex(opfmodel, :Qg), Qg0)
+  setvalue(getindex(opfmodel, :Vm), Vm0)
+  setvalue(getindex(opfmodel, :Va), Va0)
+  # Y = computeAdmittanceMatrix(opfdata, options)
+  # lc = get_flowmag2s(Vm0, Va0, Y, opfdata, options)
+  # setvalue(getindex(opfmodel, :lc), lc.flowmag2)
+
+  status = :IpoptInit
+  solvetime = @elapsed status = solve(opfmodel)
+  opfmodel.objDict[:solvetime] = solvetime
+  opfmodel.objDict[:objvalue] = getobjectivevalue(opfmodel)
+
+  if status != :Optimal
+    println("Could not solve the model to optimality.")
+  end
+  return opfmodel, status
+end
+function acopf_solve_Pg(M::OPFModel, opfdata::OPFData, Pg_arr::Vector{<:Real})
+  opfmodel = M.m
+  opfmodel, status = acopf_solve_Pg(opfmodel, opfdata, Pg_arr)
+  M.other[:solvetime] = opfmodel.objDict[:solvetime]
+  M.other[:objvalue]  = opfmodel.objDict[:objvalue]
+  return OPFModel(opfmodel, status, M.kind, M.other)
+end
+
 function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
 
   #
@@ -164,6 +197,32 @@ function acopf_initialPt_IPOPT_point(opfdata::MPCCases.OPFData)
   point[:Vm] = Vm
   point[:Va] = Va
   return point
+end
+
+function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData, Pg_arr::Vector{<:Real})
+  Qg = zeros(length(opfdata.generators)); 
+  i=1
+  for g in opfdata.generators
+    # set the power levels in in between the bounds as suggested by matpower
+    # (case data also contains initial values in .Pg and .Qg - not used with IPOPT)
+    Qg[i]=0.5*(g.Qmax+g.Qmin)
+    i=i+1
+  end
+  @assert i-1==length(opfdata.generators)
+
+  Vm=zeros(length(opfdata.buses)); i=1;
+  for b in opfdata.buses
+    # set the ini val for voltage magnitude in between the bounds
+    # (case data contains initials values in Vm - not used with IPOPT)
+    Vm[i]=0.5*(b.Vmax+b.Vmin);
+    i=i+1
+  end
+  @assert i-1==length(opfdata.buses)
+
+  # set all angles to the angle of the reference bus
+  Va = opfdata.buses[opfdata.bus_ref].Va * ones(length(opfdata.buses))
+
+  return Pg_arr,Qg,Vm,Va
 end
 
 ## -----------------------------------------------------------------------------
