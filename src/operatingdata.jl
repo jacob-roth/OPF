@@ -1,4 +1,4 @@
-function get_operatingdata(casedata::CaseData, case_options::Dict)
+function get_operatingdata(casedata::CaseData, case_options::Dict, update_case_options::Bool=false)
 
     ## get case data
     opfdata   = casedata.opf
@@ -46,6 +46,9 @@ function get_operatingdata(casedata::CaseData, case_options::Dict)
         compute_exitrate_exact_all_serial(optimal_values, opfmd, case_options, optimal_values)
     end
     case_options[:print_level] = pl
+    if update_case_options
+        case_options[:optimalvalues] = optimal_values
+    end
 
     ## write output
     write_optimal_values(case_options[:file_out], optimal_values)
