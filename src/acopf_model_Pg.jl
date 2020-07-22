@@ -1,4 +1,4 @@
-function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
+function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), Pg_slack::Bool=false)
     #
     # model
     #
@@ -6,27 +6,29 @@ function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=
     opfmodeldata = get_opfmodeldata(opfdata, options, adjustments)
     opfmodel = Model(solver=IpoptSolver(print_level=options[:print_level], tol=options[:tol], max_iter=options[:iterlim]))
     nbus = length(opfmodeldata[:buses]); nline = length(opfmodeldata[:lines]); ngen = length(opfmodeldata[:generators])
-  
+
     ## bound constrained variables
     @variable(opfmodel, opfmodeldata[:generators][i].Pmin <= Pg[i=1:ngen] <= opfmodeldata[:generators][i].Pmax)
     @variable(opfmodel, opfmodeldata[:generators][i].Qmin <= Qg[i=1:ngen] <= opfmodeldata[:generators][i].Qmax)
     @variable(opfmodel, opfmodeldata[:buses][i].Vmin <= Vm[i=1:nbus] <= opfmodeldata[:buses][i].Vmax)
     @variable(opfmodel, -pi <= Va[i=1:nbus] <= pi)
 
+    slack_gen_idx = first(findall(case_data.opf.generators.bus .== case_data.opf.bus_ref))
     for i in 1:ngen
+      if Pg_slack; if i == slack_gen_idx; continue; end; end
       setlowerbound(Pg[i], Pg_arr[i])
       setupperbound(Pg[i], Pg_arr[i])
     end
-  
+
     ## option 1
     # @variable(opfmodel, 0.0 <= Ps[i=1:nbus] <= abs(opfmodeldata[:buses][i].Pd)) # real power shed
     # @variable(opfmodel, 0.0 <= Qs[i=1:nbus] <= abs(opfmodeldata[:buses][i].Qd)) # reactive power shed
-  
+
     ## option 2
     @variable(opfmodel, -abs(opfmodeldata[:buses][i].Pd) <= Ps[i=1:nbus] <= abs(opfmodeldata[:buses][i].Pd)) # real power shed
     @variable(opfmodel, -abs(opfmodeldata[:buses][i].Qd) <= Qs[i=1:nbus] <= abs(opfmodeldata[:buses][i].Qd)) # reactive power shed
-  
-  
+
+
     if options[:pw_angle_limits] == true
       for line in opfmodeldata[:lines]
         angmin, angmax = line.angmin, line.angmax
@@ -40,7 +42,7 @@ function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=
        end
       end
     end
-  
+
     ## fix the voltage angle at the reference bus
     if options[:slack0] == true
       setlowerbound(Va[opfdata.bus_ref], 0.0)
@@ -49,7 +51,7 @@ function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=
       setlowerbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
       setupperbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
     end
-  
+
     ## objective
     if options[:shed_load]
       @NLobjective(opfmodel, Min, sum(Ps[b]^2 + Qs[b]^2 for b in 1:nbus))
@@ -66,7 +68,7 @@ function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=
         @NLobjective(opfmodel, Min, obj)
       end
     end
-  
+
     #
     # power flow balance
     #
@@ -76,7 +78,7 @@ function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=
       ## imaginary part
       add_q_constraint!(opfmodel, opfmodeldata, b)
     end
-  
+
     #
     # branch/lines flow limits
     #
@@ -89,15 +91,14 @@ function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=
         add_line_power_constraint!(opfmodel, opfmodeldata, l)
       end
     end
-  
+
     if options[:print_level] >= 1
       @printf("Buses: %d  Lines: %d  Generators: %d \n", nbus, nline, ngen)
     end
     return OPFModel(opfmodel, :InitData, :D, Dict())
-  end
-  
-  function acopf_model_Pg(opfdata::OPFData, Pg_file_path:: String, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
-    Pg_arr = vec(readdlm(Pg_file_path))
-    return acopf_model_Pg(opfdata, Pg_arr, options, adjustments)
-  end
-  
+end
+
+function acopf_model_Pg(opfdata::OPFData, Pg_file_path:: String, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments())
+  Pg_arr = vec(readdlm(Pg_file_path))
+  return acopf_model_Pg(opfdata, Pg_arr, options, adjustments)
+end
