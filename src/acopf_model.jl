@@ -3,7 +3,7 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   # model
   #
   opfmodeldata = get_opfmodeldata(opfdata, options, adjustments)
-  opfmodel = Model(solver=IpoptSolver(print_level=options[:print_level], tol=options[:tol], max_iter=options[:iterlim]))
+  opfmodel = Model(solver=IpoptSolver(print_level=options[:print_level], tol=options[:tol], max_iter=options[:iterlim], max_cpu_time=options[:max_cpu_time]))
   nbus = length(opfmodeldata[:buses]); nline = length(opfmodeldata[:lines]); ngen = length(opfmodeldata[:generators])
 
   ## bound constrained variables

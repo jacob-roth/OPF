@@ -34,6 +34,7 @@ function DefaultOptions()
   D[:shed_load]      = true    ## shed load?
   D[:ratelimit]      = 10.0    ## max upper bound on the transition rates
   D[:iterlim]        = Int(1e9)     ## max number of rounds of adding constraints
+  D[:max_cpu_time]   = 1e6     ## max time in ipopt
   D[:VOLL]           = Inf     ## Value of lost load (can be Inf)
   D[:psd_constraint] = true    ## Enforce convexity of KKT subproblem
   D[:high_temp_adj]  = true    ## High temperature adjustment to prefactor
