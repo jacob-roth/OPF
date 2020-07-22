@@ -189,8 +189,8 @@ function compute_exitrate_exact_all_parallel(solution::Dict, opfmodeldata::Dict,
 
         ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
         if ep2 !== nothing
-            rates[l] = ep2[:prefactor] * ep2[:expterm]
-            prefactors[l] = ep2[:prefactor]
+            rates[l] = abs(ep2[:prefactor]) * ep2[:expterm]
+            prefactors[l] = abs(ep2[:prefactor])
             expterms[l] = ep2[:expterm]
         end
     end
@@ -236,8 +236,8 @@ function compute_exitrate_exact_all_serial(solution::Dict, opfmodeldata::Dict, o
 
         ep2 = compute_exitrate_exact(l, solution, opfmodeldata, options)  ## NOTE: JR - USE THIS ONE
         if ep2 != nothing
-            rates[l] = ep2[:prefactor] * ep2[:expterm]
-            prefactors[l] = ep2[:prefactor]
+            rates[l] = abs(ep2[:prefactor]) * ep2[:expterm]
+            prefactors[l] = abs(ep2[:prefactor])
             expterms[l] = ep2[:expterm]
             @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(exitrate/rates[l])))
         end
