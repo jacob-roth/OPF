@@ -13,7 +13,7 @@ function acopf_model_Pg(opfdata::OPFData, Pg_arr::Vector{<:Real}, options::Dict=
     @variable(opfmodel, opfmodeldata[:buses][i].Vmin <= Vm[i=1:nbus] <= opfmodeldata[:buses][i].Vmax)
     @variable(opfmodel, -pi <= Va[i=1:nbus] <= pi)
 
-    slack_gen_idx = first(findall(case_data.opf.generators.bus .== case_data.opf.bus_ref))
+    slack_gen_idx = first(findall(opfdata.generators.bus .== opfdata.bus_ref))
     for i in 1:ngen
       if Pg_slack; if i == slack_gen_idx; continue; end; end
       setlowerbound(Pg[i], Pg_arr[i])
