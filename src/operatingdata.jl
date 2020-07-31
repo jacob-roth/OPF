@@ -56,7 +56,7 @@ function get_operatingdata(casedata::CaseData, case_options::Dict, update_case_o
     return optimal_values
 end
 
-function get_operatingdata(case_files::Dict, case_options::Dict)
-    casedata  = load_case(case_files; other=true)
-    return get_operating_point(casedata, case_options)
-end
+# function get_operatingdata(case_files::Dict, case_options::Dict)
+#     casedata  = load_case(case_files; other=true)
+#     return get_operating_point(casedata, case_options)
+# end
