@@ -664,22 +664,22 @@ end
 function get_point(M::OPFModel)
   sol = MathProgBase.getsolution(M.m.internalModel)
   point = Dict()
-  if typeof(getindex(acpf.m, :Pg)) == Array{Union{Float64, Variable},1}
+  if typeof(getindex(M.m, :Pg)) == Array{Union{Float64, Variable},1}
     point[:Pg] = deepcopy(getvalue(getindex(M.m, :Pg)))
   else
     point[:Pg] = deepcopy(sol[[x.col for x in getindex(M.m, :Pg)]])
   end
-  if typeof(getindex(acpf.m, :Qg)) == Array{Union{Float64, Variable},1}
+  if typeof(getindex(M.m, :Qg)) == Array{Union{Float64, Variable},1}
     point[:Qg] = deepcopy(getvalue(getindex(M.m, :Qg)))
   else
     point[:Qg] = deepcopy(sol[[x.col for x in getindex(M.m, :Qg)]])
   end
-  if typeof(getindex(acpf.m, :Vm)) == Array{Union{Float64, Variable},1}
+  if typeof(getindex(M.m, :Vm)) == Array{Union{Float64, Variable},1}
     point[:Vm] = deepcopy(getvalue(getindex(M.m, :Vm)))
   else
     point[:Vm] = deepcopy(sol[[x.col for x in getindex(M.m, :Vm)]])
   end
-  if typeof(getindex(acpf.m, :Va)) == Array{Union{Float64, Variable},1}
+  if typeof(getindex(M.m, :Va)) == Array{Union{Float64, Variable},1}
     point[:Va] = deepcopy(getvalue(getindex(M.m, :Va)))
   else
     point[:Va] = deepcopy(sol[[x.col for x in getindex(M.m, :Va)]])
