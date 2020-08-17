@@ -46,7 +46,7 @@ function acopf_solve_Pg(opfmodel::JuMP.Model, opfdata::OPFData, Pg_arr::Vector{<
   # initial point - needed especially for pegase cases
   #
   Pg0,Qg0,Vm0,Va0 = acopf_initialPt_IPOPT(opfdata, Pg_arr)
-  
+
   setvalue(getindex(opfmodel, :Pg), Pg0)
   setvalue(getindex(opfmodel, :Qg), Qg0)
   setvalue(getindex(opfmodel, :Vm), Vm0)
@@ -80,8 +80,9 @@ function acpf_solve(opfmodel::JuMP.Model, opfdata::OPFData, warm_point=false)
   #
   status = :IpoptInit
   solvetime = @elapsed status = solve(opfmodel)
-  M.other[:solvetime] = opfmodel.objDict[:solvetime]
-  M.other[:objvalue] = opfmodel.objDict[:objvalue]
+  solvetime = @elapsed status = solve(opfmodel)
+  opfmodel.objDict[:solvetime] = solvetime
+  opfmodel.objDict[:objvalue] = getobjectivevalue(opfmodel)
 
   if status != :Optimal
     println("Could not solve the model to optimality.")
@@ -200,7 +201,7 @@ function acopf_initialPt_IPOPT_point(opfdata::MPCCases.OPFData)
 end
 
 function acopf_initialPt_IPOPT(opfdata::MPCCases.OPFData, Pg_arr::Vector{<:Real})
-  Qg = zeros(length(opfdata.generators)); 
+  Qg = zeros(length(opfdata.generators));
   i=1
   for g in opfdata.generators
     # set the power levels in in between the bounds as suggested by matpower
@@ -663,10 +664,26 @@ end
 function get_point(M::OPFModel)
   sol = MathProgBase.getsolution(M.m.internalModel)
   point = Dict()
-  point[:Pg] = deepcopy(sol[[x.col for x in getindex(M.m, :Pg)]])
-  point[:Qg] = deepcopy(sol[[x.col for x in getindex(M.m, :Qg)]])
-  point[:Vm] = deepcopy(sol[[x.col for x in getindex(M.m, :Vm)]])
-  point[:Va] = deepcopy(sol[[x.col for x in getindex(M.m, :Va)]])
+  if typeof(getindex(acpf.m, :Pg)) == Array{Union{Float64, Variable},1}
+    point[:Pg] = deepcopy(getvalue(getindex(M.m, :Pg)))
+  else
+    point[:Pg] = deepcopy(sol[[x.col for x in getindex(M.m, :Pg)]])
+  end
+  if typeof(getindex(acpf.m, :Qg)) == Array{Union{Float64, Variable},1}
+    point[:Qg] = deepcopy(getvalue(getindex(M.m, :Qg)))
+  else
+    point[:Qg] = deepcopy(sol[[x.col for x in getindex(M.m, :Qg)]])
+  end
+  if typeof(getindex(acpf.m, :Vm)) == Array{Union{Float64, Variable},1}
+    point[:Vm] = deepcopy(getvalue(getindex(M.m, :Vm)))
+  else
+    point[:Vm] = deepcopy(sol[[x.col for x in getindex(M.m, :Vm)]])
+  end
+  if typeof(getindex(acpf.m, :Va)) == Array{Union{Float64, Variable},1}
+    point[:Va] = deepcopy(getvalue(getindex(M.m, :Va)))
+  else
+    point[:Va] = deepcopy(sol[[x.col for x in getindex(M.m, :Va)]])
+  end
   return point
 end
 
