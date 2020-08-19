@@ -66,7 +66,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
                     @NLobjective(opfmodel, Min, (sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
                                                 +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
                                                 +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators]))/options[:VOLL]) +
-                                                sum((opfmodel[:Ps][b]+opfmodel[:Qs][b]) for b in 1:opfmodeldata[:nbus]))
+                                                sum((opfmodel[:Ps][b]^2+opfmodel[:Qs][b]^2) for b in 1:opfmodeldata[:nbus]))
                 end
             end
         end
@@ -816,7 +816,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
                       )
         end
         quad = @NLexpression(opfmodel,
-                       sum(C[n,n]*(J[n])^2 for n in 1:2) +
+                       sum(C[n,n]*(J[n])^2 for n in 1:3) +
                     (2*C[2,1]*prod(J[n]    for n in 1:2)) +
                     (2*C[3,2]*prod(J[n]    for n in 2:3)) +
                     (2*C[3,1]*prod(J[n]    for n in [1,3]))
@@ -851,7 +851,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     # the denominator in the expression for the failure rate
     #
     denom = @NLexpression(opfmodel,
-                    (xstar_minus_xbar_times_grad_h*norm_squared_grad_h*detW)
+                    (xstar_minus_xbar_times_grad_h#=*norm_squared_grad_h=#*detW)
                     -quad
                 )
 
