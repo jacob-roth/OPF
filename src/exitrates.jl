@@ -894,9 +894,10 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     end
     if options[:high_temp_adj]
         @NLconstraint(opfmodel,
-                        log(((Kstar^1.5)*(norm_squared_grad_h_weighted_S)/(denom^2 + 1.0e-16)^0.25) +
-                            (2options[:temperature]/(Kstar*xstar_minus_xbar_times_grad_h))) -
+                        log(1 + (2options[:temperature]/(Kstar*xstar_minus_xbar_times_grad_h))) +
+                        1.5log(Kstar) + log(norm_squared_grad_h_weighted_S) -
                         (Kstar*xstar_minus_xbar_times_grad_h/2options[:temperature]) -
+                        0.5log(sqrt(denom^2 + 1.0e-16)) -
                         log(options[:ratelimit]*sqrt(2*pi*options[:temperature])/options[:damping])
                         <= 0
                     )
@@ -1297,7 +1298,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     prefactor  = Kstar^(1.5) * sum(S.*grad_h.^2) * (options[:damping]/sqrt(2*pi*options[:temperature]) ) / sqrt(kappa)
     energydiff = Kstar * xstar_minus_xbar_times_grad_h/2.0
     if options[:high_temp_adj]
-        prefactor += options[:temperature]/energydiff
+        prefactor *= 1 + (options[:temperature]/energydiff)
     end
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     ## line capacity utilization
