@@ -66,7 +66,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
                     @NLobjective(opfmodel, Min, (sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
                                                 +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
                                                 +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators]))/options[:VOLL]) +
-                                                sum((opfmodel[:Ps][b]+opfmodel[:Qs][b]) for b in 1:opfmodeldata[:nbus]))
+                                                sum((opfmodel[:Ps][b]^2+opfmodel[:Qs][b]^2) for b in 1:opfmodeldata[:nbus]))
                 end
             end
         end
@@ -816,7 +816,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
                       )
         end
         quad = @NLexpression(opfmodel,
-                       sum(C[n,n]*(J[n])^2 for n in 1:2) +
+                       sum(C[n,n]*(J[n])^2 for n in 1:3) +
                     (2*C[2,1]*prod(J[n]    for n in 1:2)) +
                     (2*C[3,2]*prod(J[n]    for n in 2:3)) +
                     (2*C[3,1]*prod(J[n]    for n in [1,3]))
@@ -851,7 +851,7 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     # the denominator in the expression for the failure rate
     #
     denom = @NLexpression(opfmodel,
-                    (xstar_minus_xbar_times_grad_h*norm_squared_grad_h*detW)
+                    (xstar_minus_xbar_times_grad_h#=*norm_squared_grad_h=#*detW)
                     -quad
                 )
 
@@ -894,9 +894,10 @@ function add_exitrate_constraint!(l::Int, exit_point::Dict, opfmodel::JuMP.Model
     end
     if options[:high_temp_adj]
         @NLconstraint(opfmodel,
-                        log(((Kstar^1.5)*(norm_squared_grad_h_weighted_S)/(denom^2 + 1.0e-16)^0.25) +
-                            (2options[:temperature]/(Kstar*xstar_minus_xbar_times_grad_h))) -
+                        log(1 + (2options[:temperature]/(Kstar*xstar_minus_xbar_times_grad_h))) +
+                        1.5log(Kstar) + log(norm_squared_grad_h_weighted_S) -
                         (Kstar*xstar_minus_xbar_times_grad_h/2options[:temperature]) -
+                        0.5log(sqrt(denom^2 + 1.0e-16)) -
                         log(options[:ratelimit]*sqrt(2*pi*options[:temperature])/options[:damping])
                         <= 0
                     )
@@ -1297,7 +1298,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     prefactor  = Kstar^(1.5) * sum(S.*grad_h.^2) * (options[:damping]/sqrt(2*pi*options[:temperature]) ) / sqrt(kappa)
     energydiff = Kstar * xstar_minus_xbar_times_grad_h/2.0
     if options[:high_temp_adj]
-        prefactor += options[:temperature]/energydiff
+        prefactor *= 1 + (options[:temperature]/energydiff)
     end
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     ## line capacity utilization

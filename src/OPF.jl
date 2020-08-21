@@ -49,7 +49,7 @@ include("scacopf_n1_limits.jl")
 export set_n1_limits!, get_acopf_point, get_scacopf_point, get_contingency_point, update_limits!
 
 include("util.jl")
-export acopf_solve, acopf_solve_Pg, acopf_initialPt_IPOPT
+export acopf_solve, acopf_solve_Pg, acopf_initialPt_IPOPT, acpf_solve
 export acopf_outputAll
 export scacopf_solve
 export RGL_id, RGL_idx, model_idx
@@ -59,6 +59,7 @@ export get_all_contingencies, subset_contingencies
 export remove_line!, reinstate_line!
 export get_flowmag2s, get_ratings
 export get_islanding_buses, get_islanding_buses, get_nonislanding_contingencies
+export get_point
 
 include("pfe.jl")
 export P_i, Q_i
