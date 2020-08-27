@@ -180,6 +180,7 @@ function compute_exitrate_exact_all_parallel(solution::Dict, opfmodeldata::Dict,
     prefactors = SharedVector{Float64}(length(lines))
     expterms = SharedVector{Float64}(length(lines))
     kktrates = SharedVector{Float64}(length(lines))
+    caputil = SharedVector{Float64}(length(lines))
 
     function ratecalc(l)
         exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
@@ -192,6 +193,7 @@ function compute_exitrate_exact_all_parallel(solution::Dict, opfmodeldata::Dict,
             rates[l] = abs(ep2[:prefactor]) * ep2[:expterm]
             prefactors[l] = abs(ep2[:prefactor])
             expterms[l] = ep2[:expterm]
+            caputil[l] = ep2[:caputil]
         end
     end
     pmap(ratecalc, 1:length(lines))
@@ -218,6 +220,7 @@ function compute_exitrate_exact_all_parallel(solution::Dict, opfmodeldata::Dict,
     end
     result[:kktrates] = kktrates
     result[:rates] = rates
+    result[:caputil] = caputil
     result[:prefactors] = prefactors
     result[:expterms] = expterms
 end
@@ -228,6 +231,7 @@ function compute_exitrate_exact_all_serial(solution::Dict, opfmodeldata::Dict, o
     rates = zeros(length(lines))
     prefactors = zeros(length(lines))
     expterms = zeros(length(lines))
+    caputil = zeros(length(lines))
     for l in eachindex(lines)
         exit_point = compute_exitrate_kkt(l, solution, opfmodeldata, options)
         (exit_point == nothing) && continue
@@ -239,11 +243,13 @@ function compute_exitrate_exact_all_serial(solution::Dict, opfmodeldata::Dict, o
             rates[l] = abs(ep2[:prefactor]) * ep2[:expterm]
             prefactors[l] = abs(ep2[:prefactor])
             expterms[l] = ep2[:expterm]
+            caputil[l] = ep2[:caputil]
             @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(exitrate/rates[l])))
         end
     end
     result[:kktrates] = kktrates
     result[:rates] = rates
+    result[:caputil] = caputil
     result[:prefactors] = prefactors
     result[:expterms] = expterms
 end
@@ -1041,7 +1047,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
         prefactor += options[:temperature]/energydiff
     end
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
-    caputil    = 100.0 * options[:constr_limit_scale] * sqrt(abs(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j])))/sqrt(flowmax)
+    caputil    = 100.0 * sqrt(abs(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j])))/sqrt(flowmax/options[:constr_limit_scale])
     if isnan(kappa)
         (options[:print_level] >= 1) && println("warning: unable to compute EXACT exit rate for line ", l, " = (", i, ",", j, "). kappa = ", kappa, " (NaN)")
         return nothing
@@ -1302,7 +1308,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     end
     expterm    = max(exp(-energydiff/options[:temperature]), eps(0.0))
     ## line capacity utilization
-    caputil    = 100.0 * options[:constr_limit_scale] * sqrt(abs(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j])))/sqrt(flowmax)
+    caputil    = 100.0 * sqrt(abs(VMbar[i]^2 + VMbar[j]^2 - 2*VMbar[i]*VMbar[j]*cos(VAbar[i]-VAbar[j])))/sqrt(flowmax/options[:constr_limit_scale])
 
     if prefactor < 0 || isnan(prefactor)
         (options[:print_level] >= 1) && println("warning: unable to compute KKT exit rate for line ", l, " = (", i, ",", j, "). prefactor = ", prefactor, " (negative)")
