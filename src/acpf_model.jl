@@ -60,6 +60,7 @@ function acpf_model(dispatch_point::Dict, opfdata, options::Dict=DefaultOptions(
   Vm = Array{Union{Float64, JuMP.Variable}}(undef, nbus)
   @variable(opfmodel, Vm_L[i=L])  # unbounded loads
   for b in L
+    setlowerbound(Vm_L[b], 0.0)
     Vm[b] = Vm_L[b]
     setvalue(Vm[b], dispatch_point[:Vm][b])
   end
@@ -146,3 +147,30 @@ function acpf_model(dispatch_point::Dict, opfdata, options::Dict=DefaultOptions(
   end
   return OPFModel(opfmodel, :InitData, :D, Dict())
 end
+#
+#
+# function compute_p(b, Vm, Va, opfdata, YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI)
+#   lines = opfdata.lines; buses = opfdata.buses; generators = opfdata.generators; baseMVA = opfdata.baseMVA
+#   busIdx = opfdata.BusIdx; FromLines = opfdata.FromLines; ToLines = opfdata.ToLines; BusGeners = opfdata.BusGenerators;
+#   nbus = length(buses); nline = length(lines); ngen = length(generators)
+#
+#   p = (
+#         ( reduce(+, YffR[l] for l in FromLines[b]; init=0.0) + reduce(+, YttR[l] for l in ToLines[b]; init=0.0) + YshR[b] ) * Vm[b]^2
+#         + reduce(+, Vm[b]*Vm[busIdx[lines[l].to]]  *( YftR[l]*cos(Va[b]-Va[busIdx[lines[l].to]]  ) + YftI[l]*sin(Va[b]-Va[busIdx[lines[l].to]]  )) for l in FromLines[b]; init=0.0 )
+#         + reduce(+, Vm[b]*Vm[busIdx[lines[l].from]]*( YtfR[l]*cos(Va[b]-Va[busIdx[lines[l].from]]) + YtfI[l]*sin(Va[b]-Va[busIdx[lines[l].from]])) for l in ToLines[b]; init=0.0   )
+#         - ( reduce(+, baseMVA*Pg[g] for g in BusGeners[b]; init=0.0) - buses[b].Pd ) / baseMVA
+#   )
+#   return p
+# end
+#
+# v = Vm .* exp.(im .* Va)
+# # v = v[C.N.σ_e2i]
+# Y = C.YY[C.N.σ_i2e, C.N.σ_i2e]
+# S = v .* conj(Y*v)
+#
+# Pnet = [reduce(+, Pg[g] for g in casedata.opf.BusGenerators[i]; init=0.0) - (buses[i].Pd / 100.0) for i in 1:length(buses)]
+# Qnet = [reduce(+, Qg[g] for g in casedata.opf.BusGenerators[i]; init=0.0) - (buses[i].Qd / 100.0) for i in 1:length(buses)]
+#
+# 1;2;13;22;23;27;3;4;5...
+#
+# pnet2=0.2779784343168673

@@ -340,7 +340,7 @@ end
 function write_optimal_values(file::String, optimal_values::Dict)
     for k in keys(optimal_values)
         if !isdir("$(file)")
-            mkdir("$(file)")
+            mkpath("$(file)")
         end
         if isa(optimal_values[k], String)
             write("$(file)$(string(k)).csv", optimal_values[k], '\n')
