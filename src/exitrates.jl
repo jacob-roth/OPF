@@ -12,6 +12,13 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
     opfmodel.objDict[:solvetime] = NaN
     opfmodel.objDict[:objvalue] = NaN
+    opfmodel.objDict[:iters_total] = 0
+    opfmodel.objDict[:iters_feasibility_phase] = 0
+    opfmodel.objDict[:iters_optimization_phase] = 0
+    opfmodel.objDict[:time_rate_eval] = 0.0
+    opfmodel.objDict[:time_main_nlp] = 0.0
+    opfmodel.objDict[:time_main_nlp_in_ipopt] = 0.0
+    opfmodel.objDict[:time_main_nlp_func_eval] = 0.0
 
     ## solution vector
     solution = get_initial_point(opfmodel, opfdata, warm_point_given)
@@ -24,12 +31,24 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         lines_with_added_rate_constraints = Set{Int}()
         while iter < options[:iterlim]
             iter += 1
+            !minimize_cost && (opfmodel.objDict[:iters_feasibility_phase] += 1)
 
             ## set initial point
             set_initial_point!(opfmodel, solution)
 
             ## solve
-            status = solve(opfmodel)
+            if options[:print_level] >= 5
+                (status, ipopt_time, eval_time) = get_NLP_solve_status_and_times(opfmodel)
+                opfmodel.objDict[:time_main_nlp] += ipopt_time + eval_time
+                opfmodel.objDict[:time_main_nlp_in_ipopt] += ipopt_time
+                opfmodel.objDict[:time_main_nlp_func_eval] += eval_time
+            else
+                start_time = time()
+                status = solve(opfmodel)
+                opfmodel.objDict[:time_main_nlp] += time() - start_time
+                opfmodel.objDict[:time_main_nlp_in_ipopt] += NaN
+                opfmodel.objDict[:time_main_nlp_func_eval] += NaN
+            end
             println("\nITER   = $(iter) ")
             println("STATUS = $(string(status))\n")
             println()
@@ -43,10 +62,12 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
             ## loop over lines and check exit rates
             pl = deepcopy(options[:print_level])
             options[:print_level] = 0
+            opfmodel.objDict[:time_rate_eval] += @elapsed begin
             if options[:parallel]
                 updated = compute_add_exitrates_parallel(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
             else
                 updated = compute_add_exitrates_serial(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
+            end
             end
             options[:print_level] = pl
 
@@ -72,10 +93,12 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         end
     end
     other[:objvalue] = getobjectivevalue(opfmodel)
+    opfmodel.objDict[:iters_total] = iter
+    opfmodel.objDict[:iters_optimization_phase] = iter - opfmodel.objDict[:iters_feasibility_phase]
     opfmodel.objDict[:solvetime] = other[:solvetime]
     opfmodel.objDict[:objvalue]  = other[:objvalue]
-    println("objDict time: ", opfmodel.objDict[:solvetime])
-    println("objDict obj : ", opfmodel.objDict[:objvalue])
+    # println("objDict time: ", opfmodel.objDict[:solvetime])
+    # println("objDict obj : ", opfmodel.objDict[:objvalue])
     # solution[:objvalue] = other[:objvalue]
     # solution[:solvetime] = other[:solvetime]
 
@@ -94,10 +117,10 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
 end
 function acopf_solve_exitrates(M, casedata, options::Dict=DefaultOptions(), adjustments::Dict=DefaultAdjustments(), warm_point_given=false)
     opfm, status, other = acopf_solve_exitrates(M.m, casedata, options, adjustments, warm_point_given, M.other)
-    println("objDict time: ", opfm.objDict[:solvetime])
-    println("objDict obj : ", opfm.objDict[:objvalue])
-    println("other time: ", other[:solvetime])
-    println("other obj : ", other[:objvalue])
+    # println("objDict time: ", opfm.objDict[:solvetime])
+    # println("objDict obj : ", opfm.objDict[:objvalue])
+    # println("other time: ", other[:solvetime])
+    # println("other obj : ", other[:objvalue])
     return OPFModel(opfm, status, M.kind, other)
 end
 
@@ -215,9 +238,9 @@ function compute_exitrate_exact_all_parallel(solution::Dict, opfmodeldata::Dict,
     #     @async @spawn ratecalc()
     # end
 
-    for l in eachindex(lines)
-        @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(kktrates[l]/rates[l])))
-    end
+    # for l in eachindex(lines)
+    #     @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(kktrates[l]/rates[l])))
+    # end
     result[:kktrates] = kktrates
     result[:rates] = rates
     result[:caputil] = caputil
@@ -244,7 +267,7 @@ function compute_exitrate_exact_all_serial(solution::Dict, opfmodeldata::Dict, o
             prefactors[l] = abs(ep2[:prefactor])
             expterms[l] = ep2[:expterm]
             caputil[l] = ep2[:caputil]
-            @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(exitrate/rates[l])))
+            # @printf("Compare ---> line %4d: exact = %10.2e, log(approx/exact) = %10.2e\n", l, rates[l], abs(log(exitrate/rates[l])))
         end
     end
     result[:kktrates] = kktrates
@@ -330,9 +353,16 @@ function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
     solution[:grad_H] =  ∇H_direct([solution[:Vm];  solution[:Va]];  solution=solution, opfmodeldata=opfmodeldata)
     solution[:hess_H] = ∇2H_direct([solution[:Vm];  solution[:Va]];  solution=solution, opfmodeldata=opfmodeldata)
 
-    # solve time
-    solution[:solvetime] = opfmodel.objDict[:solvetime]
-    solution[:objvalue]  = opfmodel.objDict[:objvalue]
+    # Other
+    for key in [:solvetime, :objvalue, :iters_total, :iters_feasibility_phase, :iters_optimization_phase, :time_rate_eval, :time_main_nlp, :time_main_nlp_in_ipopt, :time_main_nlp_func_eval]
+        solution[key] = opfmodel.objDict[key]
+    end
+
+    # Generation cost
+    gens = opfmodeldata[:generators]
+    solution[:gencost] = sum(gens[i].coeff[gens[i].n-2]*(baseMVA*Pg[i])^2
+                            +gens[i].coeff[gens[i].n-1]*(baseMVA*Pg[i])
+                            +gens[i].coeff[gens[i].n  ] for i=1:length(gens))
 
     return solution
 end
@@ -1406,4 +1436,30 @@ function get_LDL_factors_load_gen!(L, D, V1, θ1, V2, θ2, idxV1, idxθ1, idxV2,
         L[idxθ2,1] = @NLexpression(model, -L[idxθ1,1])
         L[idxθ2,2] = @NLexpression(model, -L[idxθ1,2])
     end
+end
+
+## -----------------------------------------------------------------------------
+## Customized solve: assumes (1) solver = Ipopt, (2) Ipopt prints to stdout
+## -----------------------------------------------------------------------------
+function get_NLP_solve_status_and_times(model)
+    original_stdout = Base.stdout;
+    (read_pipe, write_pipe) = redirect_stdout();
+    status = solve(model)
+    redirect_stdout(original_stdout); 
+    close(write_pipe)
+    solve_time = NaN
+    eval_time = NaN
+    while true
+        str = readline(read_pipe)
+        if occursin("Total CPU secs in IPOPT", str)
+            eval_time = parse(Float64, str[findfirst("=", str)[1]+1:end])
+        end
+        if occursin("Total CPU secs in NLP function evaluations", str)
+            solve_time = parse(Float64, str[findfirst("=", str)[1]+1:end]) 
+        end
+        if length(str) > 3 && str[1:4] == "EXIT"
+            break
+        end
+    end
+    return (status, solve_time, eval_time)
 end
