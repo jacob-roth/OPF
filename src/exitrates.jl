@@ -355,7 +355,9 @@ function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
 
     # Other
     for key in [:solvetime, :objvalue, :iters_total, :iters_feasibility_phase, :iters_optimization_phase, :time_rate_eval, :time_main_nlp, :time_main_nlp_in_ipopt, :time_main_nlp_func_eval]
-        solution[key] = opfmodel.objDict[key]
+        if haskey(opfmodel.objDict, key)
+            solution[key] = opfmodel.objDict[key]
+        end
     end
 
     # Generation cost
