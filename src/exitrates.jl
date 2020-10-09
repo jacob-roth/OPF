@@ -12,13 +12,15 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
     nonLoadBuses = opfmodeldata[:nonLoadBuses]
     opfmodel.objDict[:solvetime] = NaN
     opfmodel.objDict[:objvalue] = NaN
+    opfmodel.objDict[:num_line_failure_constraints_added] = 0
     opfmodel.objDict[:iters_total] = 0
     opfmodel.objDict[:iters_feasibility_phase] = 0
     opfmodel.objDict[:iters_optimization_phase] = 0
-    opfmodel.objDict[:time_rate_eval] = 0.0
-    opfmodel.objDict[:time_main_nlp] = 0.0
-    opfmodel.objDict[:time_main_nlp_in_ipopt] = 0.0
-    opfmodel.objDict[:time_main_nlp_func_eval] = 0.0
+    opfmodel.objDict[:time_wall_rate_eval] = 0.0
+    opfmodel.objDict[:time_wall_main_nlp] = 0.0
+    opfmodel.objDict[:time_cpu_main_nlp] = 0.0
+    opfmodel.objDict[:time_cpu_main_nlp_in_ipopt] = 0.0
+    opfmodel.objDict[:time_cpu_main_nlp_func_eval] = 0.0
 
     ## solution vector
     solution = get_initial_point(opfmodel, opfdata, warm_point_given)
@@ -38,16 +40,18 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
 
             ## solve
             if options[:print_level] >= 5
-                (status, ipopt_time, eval_time) = get_NLP_solve_status_and_times(opfmodel)
-                opfmodel.objDict[:time_main_nlp] += ipopt_time + eval_time
-                opfmodel.objDict[:time_main_nlp_in_ipopt] += ipopt_time
-                opfmodel.objDict[:time_main_nlp_func_eval] += eval_time
+                (status, total_wall_time, ipopt_time, eval_time) = get_NLP_solve_status_and_times(opfmodel)
+                opfmodel.objDict[:time_wall_main_nlp] += total_wall_time
+                opfmodel.objDict[:time_cpu_main_nlp] += ipopt_time + eval_time
+                opfmodel.objDict[:time_cpu_main_nlp_in_ipopt] += ipopt_time
+                opfmodel.objDict[:time_cpu_main_nlp_func_eval] += eval_time
             else
                 start_time = time()
                 status = solve(opfmodel)
-                opfmodel.objDict[:time_main_nlp] += time() - start_time
-                opfmodel.objDict[:time_main_nlp_in_ipopt] += NaN
-                opfmodel.objDict[:time_main_nlp_func_eval] += NaN
+                opfmodel.objDict[:time_wall_main_nlp] += time() - start_time
+                opfmodel.objDict[:time_cpu_main_nlp] += NaN
+                opfmodel.objDict[:time_cpu_main_nlp_in_ipopt] += NaN
+                opfmodel.objDict[:time_cpu_main_nlp_func_eval] += NaN
             end
             println("\nITER   = $(iter) ")
             println("STATUS = $(string(status))\n")
@@ -62,7 +66,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
             ## loop over lines and check exit rates
             pl = deepcopy(options[:print_level])
             options[:print_level] = 0
-            opfmodel.objDict[:time_rate_eval] += @elapsed begin
+            opfmodel.objDict[:time_wall_rate_eval] += @elapsed begin
             if options[:parallel]
                 updated = compute_add_exitrates_parallel(solution, opfmodel, opfmodeldata, lines_with_added_rate_constraints, options)
             else
@@ -93,6 +97,7 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
         end
     end
     other[:objvalue] = getobjectivevalue(opfmodel)
+    opfmodel.objDict[:num_line_failure_constraints_added] = length(lines_with_added_rate_constraints)
     opfmodel.objDict[:iters_total] = iter
     opfmodel.objDict[:iters_optimization_phase] = iter - opfmodel.objDict[:iters_feasibility_phase]
     opfmodel.objDict[:solvetime] = other[:solvetime]
@@ -354,7 +359,7 @@ function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)
     solution[:hess_H] = ∇2H_direct([solution[:Vm];  solution[:Va]];  solution=solution, opfmodeldata=opfmodeldata)
 
     # Other
-    for key in [:solvetime, :objvalue, :iters_total, :iters_feasibility_phase, :iters_optimization_phase, :time_rate_eval, :time_main_nlp, :time_main_nlp_in_ipopt, :time_main_nlp_func_eval]
+    for key in [:solvetime, :objvalue, :iters_total, :iters_feasibility_phase, :iters_optimization_phase, :num_line_failure_constraints_added, :time_wall_rate_eval, :time_wall_main_nlp, :time_cpu_main_nlp, :time_cpu_main_nlp_in_ipopt, :time_cpu_main_nlp_func_eval]
         if haskey(opfmodel.objDict, key)
             solution[key] = opfmodel.objDict[key]
         end
@@ -1446,7 +1451,9 @@ end
 function get_NLP_solve_status_and_times(model)
     original_stdout = Base.stdout;
     (read_pipe, write_pipe) = redirect_stdout();
+    start_time = time()
     status = solve(model)
+    total_wall_time = time() - start_time
     redirect_stdout(original_stdout); 
     close(write_pipe)
     solve_time = NaN
@@ -1463,5 +1470,5 @@ function get_NLP_solve_status_and_times(model)
             break
         end
     end
-    return (status, solve_time, eval_time)
+    return (status, total_wall_time, solve_time, eval_time)
 end
