@@ -57,63 +57,6 @@ for idx in 1:length(nodes)
     end
 end
 
-# Get counts of bus types
-nodes = powergrid.nodes
-bus_array = collect(values(nodes))
-type_dict = Dict{Type{<:AbstractNode}, Int}()
-type_dict[SwingEq] = 0
-type_dict[PQAlgebraic] = 0
-type_dict[SlackAlgebraic] = 0
-
-for bus in bus_array
-    bus_type = typeof(bus)
-    type_dict[bus_type] += 1
-end
-
-# symbolsof(pq) == [:u_r, :u_i]
-# symbolsof(swing) == [:u_r, :u_i, :ω]
-# symbolsof(slack) == [:u_r, :u_i]
-
-
-# Import operatingpoint from FPACOPF into PowerDynamics framework
-operatingdata_path = "/"
-Va = reshape(readdlm(operatingdata_path * "Va.csv"), 118)
-Vm = reshape(readdlm(operatingdata_path * "Vm.csv"), 118)
-
-u_r = Vm .* cos.(Va)
-u_i = Vm .* sin.(Vm)
-ω = 0
-
-num_gens = type_dict[SwingEq]
-num_loads = type_dict[PQAlgebraic]
-num_slack = type_dict[SlackAlgebraic]
-num_vars = (num_gens * 3) + (num_loads * 2) + (num_slack * 2) 
-
-fpacopf_op = Array{Float64,1}(undef, num_vars)
-
-vec_idx = 1
-for node_idx in 1:length(nodes)
-    node = nodes[node_idx]
-    if isa(node, SwingEq)
-        fpacopf_op[vec_idx] = u_r[node_idx]
-        fpacopf_op[vec_idx+1] = u_i[node_idx]
-        fpacopf_op[vec_idx+2] = ω
-        vec_idx += 3
-    else
-        fpacopf_op[vec_idx] = u_r[node_idx]
-        fpacopf_op[vec_idx+1] = u_i[node_idx]
-        vec_idx += 2
-    end
-end
-
-# FPACOPF is not a root it seems
-# du = similar(fpacopf_op)
-# rpg = rhs(powergrid)
-# rpg(du, fpacopf_op, nothing, 0.0)
-# if maximum(abs.(du)) > 1e-4
-#     @warn "The operationpoint search did not converge in a fixed point!"
-# end
-
 # Operationpoint from PowerDynamics
 operationpoint = find_operationpoint(powergrid)
 
