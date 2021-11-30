@@ -30,7 +30,7 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys:
 
     # generator
     elseif opfmodeldata[:buses][i].bustype == 2
-      B["params"]["P"] = optimal_values[:Pnet][i]
+      B["params"]["P"] = +1optimal_values[:Pnet][i]
       # B["params"]["Q"] = optimal_values[:Qnet][i]
       # B["params"]["V"] = optimal_values[:Vm][i]
       B["params"]["H"] = phys[:H]
@@ -40,9 +40,9 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys:
 
     # load
     elseif opfmodeldata[:buses][i].bustype == 1
-      B["params"]["P"] = optimal_values[:Pnet][i]
+      B["params"]["P"] = +1optimal_values[:Pnet][i]
       # B["params"]["V"] = optimal_values[:Vm][i]
-      B["params"]["Q"] = optimal_values[:Qnet][i]
+      B["params"]["Q"] = +1optimal_values[:Qnet][i]
       B["type"] = "PQAlgebraic"
     end
 
@@ -51,9 +51,16 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys:
   end
 
   # lines
+  FT = [Set([opfmodeldata[:lines][l].from, opfmodeldata[:lines][l].to]) for l in 1:nline]
   for l = 1:nline
     f = opfmodeldata[:lines][l].from
     t = opfmodeldata[:lines][l].to
+    ft = Set([f,t])
+    dupes = [ft == x for x in FT]
+    if sum(dupes) > 1
+      continue
+    end
+
     ff = min(f,t) # need to have from.id <= to.id for PD lightgraphs dependency
     tt = max(f,t) # need to have from.id <= to.id for PD lightgraphs dependency
     L = Dict()
@@ -63,7 +70,7 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys:
     L["params"]["to"] = "bus" * string(tt)
     L["params"]["Y"] = Dict()
     L["params"]["Y"]["re"] = 0.0
-    L["params"]["Y"]["im"] = opfmodeldata[:Y][ff, tt] # or should it be [f,t]?
+    L["params"]["Y"]["im"] = sum(opfmodeldata[:Y][ff, tt] for (ff,tt) in FT[dupes]) # or should it be [f,t]?
     L["type"] = "StaticLine"
     # L["params"]["y"]["re"] = 0.0
     # L["params"]["y"]["im"] = opfmodeldata[:Y][f, t]
