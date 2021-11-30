@@ -43,8 +43,16 @@ opfmodeldata = get_opfmodeldata(opfdata, options)
 opfmodeldata[:Y] = imag.(opfmodeldata[:Y])
 solution = get_optimal_values(opfmodel_acopf.m, opfmodeldata)
 
-opf2pd("/Users/jakeroth/git/OPF/test/test118.json", solution, opfmodeldata, phys)
 opf2pd("/Users/jakeroth/git/PowerDynamics.jl/examples/pglib_118bus/grid118.json", solution, opfmodeldata, phys)
+
+writedlm("/Users/jakeroth/git/PowerDynamics.jl/examples/pglib_118bus/Pnet.csv", solution[:Pnet])
+writedlm("/Users/jakeroth/git/PowerDynamics.jl/examples/pglib_118bus/Qnet.csv", solution[:Qnet])
+writedlm("/Users/jakeroth/git/PowerDynamics.jl/examples/pglib_118bus/Vm.csv", solution[:Vm])
+writedlm("/Users/jakeroth/git/PowerDynamics.jl/examples/pglib_118bus/Va.csv", solution[:Va])
+writedlm("/Users/jakeroth/git/PowerDynamics.jl/examples/pglib_118bus/grad_H_xbar.csv", solution[:grad_H])
+writedlm("/Users/jakeroth/git/PowerDynamics.jl/examples/pglib_118bus/hess_H_xbar.csv", solution[:hess_H])
+writedlm("/Users/jakeroth/git/PowerDynamics.jl/examples/pglib_118bus/Y.csv", opfmodeldata[:Y])
+
 
 writedlm("load-case/Pnet0.csv", solution[:Pnet])
 writedlm("load-case/Qnet0.csv", solution[:Qnet])
