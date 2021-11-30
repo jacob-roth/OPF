@@ -85,6 +85,9 @@ export compute_exitrate_exact_all_parallel, compute_exitrate_exact_all_serial
 include("operatingdata.jl")
 export get_operatingdata
 
+include("OPF2PD.jl")
+export opf2pd
+
 # include("acopf_n1_limits.jl")
 # export set_n1_limits!
 # export get_nonislanding_lines

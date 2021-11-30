@@ -1,10 +1,10 @@
 const path = "/Users/jakeroth/Desktop/planning-large-deviation/data/cases/118-files/"
-const path = "/home/jroth/Projects/planning-large-deviation/data/cases/118-files/"
+# const path = "/home/jroth/Projects/planning-large-deviation/data/cases/118-files/"
 const tol = 1e-9
 const plotting = false
 const temp = 1e-4
 const damping = 1.0
-const case_name = "mpc_base_pgliblimits"
+# const case_name = "mpc_base_pgliblimits"
 const case_name = "mpc_lowdamp_pgliblimits"
 const l = 50
 
@@ -34,12 +34,18 @@ options[:slack0]         = true
 
 mkpath("load-case/")
 casedata = load_case(case_name, path; other=true)
-opfdata = load_case(case_name, path; other=false)
+# opfdata = load_case(case_name, path; other=true)
+opfdata  = casedata.opf
 opfmodel = acopf_model(opfdata, options)
 opfmodel_acopf = acopf_solve(opfmodel, opfdata)
 acopf_outputAll(opfmodel_acopf, opfdata, options)
 opfmodeldata = get_opfmodeldata(opfdata, options)
+opfmodeldata[:Y] = imag.(opfmodeldata[:Y])
 solution = get_optimal_values(opfmodel_acopf.m, opfmodeldata)
+
+opf2pd("/Users/jakeroth/git/OPF/test/test118.json", solution, opfmodeldata, phys)
+opf2pd("/Users/jakeroth/git/PowerDynamics.jl/examples/pglib_118bus/grid118.json", solution, opfmodeldata, phys)
+
 writedlm("load-case/Pnet0.csv", solution[:Pnet])
 writedlm("load-case/Qnet0.csv", solution[:Qnet])
 writedlm("load-case/Vm0.csv", solution[:Vm])
