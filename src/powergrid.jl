@@ -2,7 +2,8 @@ using DelimitedFiles
 using PowerDynamics
 
 powergrid_path = "/"
-powergrid = read_powergrid(powergrid_path * "ieee118_v3.json", Json)
+json_file = "ieee118_v4.json"
+powergrid = read_powergrid(powergrid_path * json_file, Json)
 
 # Check branch data was entered correctly
 branch_idx = [(l.from, l.to) for l in powergrid.lines]
@@ -30,6 +31,10 @@ bus_type_vals = bus_file[:,2]
 bus_P_vals = bus_file[:,3] / 100
 bus_Q_vals = bus_file[:,4] / 100
 
+gen_file = readdlm(casefile_path * "pglib/pglib_opf_case118_ieee_lowdamp.gen")
+gen_ids = Int.(gen_file[:,1])
+gen_P_vals = gen_file[:,2] / 100
+
 M = 0.0531
 Ω = 2 * π * 50
 H = M * Ω / 2
@@ -40,8 +45,9 @@ for idx in 1:length(nodes)
     try 
         node = nodes[idx]
         if isa(node, SwingEq)
+            gen_idx = findfirst(isequal(idx), gen_ids)
             @assert bus_type_vals[idx] == 2
-            @assert node.P == -bus_P_vals[idx]
+            @assert abs(node.P - (gen_P_vals[gen_idx] - bus_P_vals[idx])) <= eps()
             @assert node.H == H
             @assert node.Ω == Ω
             @assert node.D == D

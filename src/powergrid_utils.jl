@@ -43,7 +43,7 @@ function import_own_operatingpoint(powergrid::PowerGrid, operatingdata_path::Str
     own_op = Array{Float64,1}(undef, num_vars)
     vec_idx = 1
     for node_idx = 1:length(nodes)
-        node = nodes["bus$node_idx"]
+        node = nodes[node_idx]
         if isa(node, SwingEq)
             own_op[vec_idx] = u_r[node_idx]
             own_op[vec_idx+1] = u_i[node_idx]
