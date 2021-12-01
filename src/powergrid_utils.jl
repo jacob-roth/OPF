@@ -5,10 +5,11 @@
 function get_type_dict(powergrid::PowerGrid)
     nodes = powergrid.nodes
     bus_array = collect(values(nodes))
+    bus_types = Set(typeof.(bus_array))
     type_dict = Dict{Type{<:AbstractNode}, Int}()
-    type_dict[SwingEq] = 0
-    type_dict[PQAlgebraic] = 0
-    type_dict[SlackAlgebraic] = 0
+    for bus_type in bus_types
+        type_dict[bus_type] = 0
+    end
     for bus in bus_array
         bus_type = typeof(bus)
         type_dict[bus_type] += 1
@@ -37,7 +38,7 @@ function import_own_operatingpoint(powergrid::PowerGrid, operatingdata_path::Str
 
     u_r = Vm .* cos.(Va)
     u_i = Vm .* sin.(Vm)
-    ω = 0 #2 * π * 50
+    ω = 0
 
     own_op = Array{Float64,1}(undef, num_vars)
     vec_idx = 1
@@ -60,7 +61,6 @@ end
 # Import operatingpoint from FPACOPF into PowerDynamics framework
 function import_own_operatingpoint(powergrid::PowerGrid, optimal_values::Dict)
     nodes = powergrid.nodes
-    num_buses = length(nodes)
     type_dict = get_type_dict(powergrid)
     num_vars = get_num_vars(type_dict)
 
