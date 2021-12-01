@@ -552,6 +552,7 @@ function get_opfmodeldata(casedata::CaseData, options::Dict=DefaultOptions(), ad
   return opfmodeldata
 end
 
+#=
 function get_S(casedata::CaseData)
   nbus  = length(casedata.opf.buses)
   ngen  = length(casedata.opf.generators)
@@ -587,6 +588,37 @@ function get_S(casedata::CaseData)
   end
 
   return Sdiag
+end
+=#
+
+function get_S(casedata::CaseData)
+    opfdata = casedata.opf
+    buses = opfdata.buses
+    phys = casedata.phys
+    nbus = length(buses)
+    slackbus_idx = opfdata.bus_ref
+    slackbus_ID = buses[slackbus_idx].bus_i
+    loadbus_IDs = Int[]
+    for n in 1:nbus
+      (n == slackbus_idx || !isempty(opfdata.BusGenerators[n])) && continue
+      push!(loadbus_IDs, buses[n].bus_i)
+    end
+    nload = length(loadbus_IDs)
+    nonslackbus_IDs = filter(x -> x ∉ slackbus_ID, buses.bus_i)
+    @assert length(nonslackbus_IDs) == nbus - 1
+
+    Sdiag = zeros(nload + nbus - 1)
+    for (S_idx, bus_ID) in enumerate([loadbus_IDs; nonslackbus_IDs])
+      @assert length(filter(x -> phys[x].ID == bus_ID, 1:length(phys))) == 1
+      phys_idx = filter(x -> phys[x].ID == bus_ID, 1:length(phys))[1]
+      if (bus_ID in loadbus_IDs) && (S_idx <= nload)
+        Sdiag[S_idx] = 1.0 / phys[phys_idx].Dv
+      elseif (bus_ID in loadbus_IDs) && (S_idx > nload)
+        Sdiag[S_idx] = 1.0 / phys[phys_idx].D
+      end
+    end
+
+    return Sdiag
 end
 
 function update_loadings!(opfdata::OPFData, options::Dict,
