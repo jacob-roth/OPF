@@ -144,14 +144,14 @@ function scacopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustm
     #
     # full objective function
     #
-    objective_full = m[:obj]
     if options[:sc_total_obj] == true
+        objective_full = m[:obj]
         for c_id in keys(contingencies)
             c_idx = first(findall(c_id .== collect(keys(contingencies))))
             objective_full = @NLexpression(m, objective_full + obj_cs[c_idx])
         end
+        @NLobjective(m, Min, objective_full)
     end
-    @NLobjective(m, Min, objective_full)
 
     return OPFModel(m, :InitData, :SC, Dict())
 end
