@@ -31,7 +31,7 @@ bus_type_vals = bus_file[:,2]
 bus_P_vals = bus_file[:,3] / 100
 bus_Q_vals = bus_file[:,4] / 100
 
-gen_file = readdlm(casefile_path * "pglib/pglib_opf_case118_ieee_lowdamp.gen")
+gen_file = readdlm(casefile_path * "pglib_opf_case118_ieee_lowdamp.gen")
 gen_ids = Int.(gen_file[:,1])
 gen_P_vals = gen_file[:,2] / 100
 
