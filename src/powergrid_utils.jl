@@ -68,20 +68,22 @@ function import_own_operatingpoint(powergrid::PowerGrid, operatingdata_path::Str
     return import_own_operatingpoint(powergrid, optimal_values)
 end
 
-function isa_root(powergrid::PowerGrid, operatingpoint_vec::AbstractArray; abs_err::Real=eps())
+function err_from_root(powergrid::PowerGrid, operatingpoint_vec::AbstractArray)
     du = similar(operatingpoint_vec)
     rpg = rhs(powergrid)
     rpg(du, operatingpoint_vec, nothing, 0.0)
-    if maximum(abs.(du)) > abs_err
-        @warn "The operationpoint search did not converge in a fixed point!"
-        return false
-    else
-        return true
-    end
+    return du
 end
 
-function isa_root(operatingpoint::State; abs_err::Real=eps())
+function err_from_root(operatingpoint::State)
     grid = operatingpoint.grid
     vec = operatingpoint.vec
-    return isa_root(grid, vec, abs_err=abs_err)
+    return err_from_root(grid, vec)
+end
+
+function import_initial_contingencies(ic_file_path::String)
+    ic_ID_arr = readdlm(ic_file_path)
+    num_ics = size(ic_ID_arr,1)
+    ic_ID_vec = [(Int(ic_ID_arr[ic_idx,1]), Int(ic_ID_arr[ic_idx,2])) for ic_idx in 1:num_ics]
+    return ic_ID_vec
 end
