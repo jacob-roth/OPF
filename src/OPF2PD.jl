@@ -4,8 +4,9 @@ const physDefault[:H] = 0.0531 * physDefault[:Ω] / 2 # M*Ω/2
 const physDefault[:Dg] = 0.05
 const physDefault[:Dv] = 0.005
 # opf2pd("/Users/jakeroth/git/OPF/test/test.json", optimal_values, opfmodeldata, phys)
-function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys::Dict = physDefault)
+function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_type::String, phys::Dict = physDefault)
   # setup
+  @assert line_type ∈ Set(["StaticLine", "PiModelLine"])
   nbus = length(optimal_values[:Vm])
   nline = length(opfmodeldata[:lines])
   out = Dict()
@@ -70,18 +71,20 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys:
     L["params"] = Dict()
     L["params"]["from"] = "bus" * string(ff)
     L["params"]["to"] = "bus" * string(tt)
-    L["params"]["Y"] = Dict()
-    L["params"]["Y"]["re"] = 0.0
-    # L["params"]["Y"]["im"] = sum(opfmodeldata[:Y][ff, tt] for (ff,tt) in FT[dupes]) # or should it be [f,t]?
-    L["params"]["Y"]["im"] = -1opfmodeldata[:Y][ff, tt]
-    L["type"] = "StaticLine"
-    # L["params"]["y"]["re"] = 0.0
-    # L["params"]["y"]["im"] = opfmodeldata[:Y][f, t]
-    # L["params"]["y_shunt_mk"] = 
-    # L["params"]["y_shunt_km"] = 
-    # L["params"]["t_shunt_mk"] = 
-    # L["params"]["t_shunt_km"] = 
-    # L["type"] = "PiModelLine"
+    L["type"] = line_type
+    if line_type == "PiModelLine"
+      L["params"]["y"] = Dict()
+      L["params"]["y"]["re"] = 0.0
+      L["params"]["y"]["im"] = -opfmodeldata[:Y][ff, tt]
+      L["params"]["y_shunt_km"] = complex(0.0, opfmodeldata[:YshI][ff])
+      L["params"]["y_shunt_mk"] = complex(0.0, opfmodeldata[:YshI][tt])
+      # L["params"]["t_shunt_km"] =
+      # L["params"]["t_shunt_mk"] = 
+    else
+      L["params"]["Y"] = Dict()
+      L["params"]["Y"]["re"] = 0.0
+      L["params"]["Y"]["im"] = -opfmodeldata[:Y][ff, tt]
+    end
 
     # add to `nodes` array
     push!(out["lines"], L)
@@ -94,7 +97,7 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys:
   # return JSON.print(out, 1)
 end
 
-function opf2pd(fileout::String, operatingdata_path::String, opfmodeldata::Dict, phys::Dict=physDefault)
+function opf2pd(fileout::String, operatingdata_path::String, opfmodeldata::Dict, line_type::String, phys::Dict=physDefault)
   Y = opfmodeldata[:Y]
   if isa(Y, AbstractArray{<:Complex})
     opfmodeldata[:Y] = imag.(Y)
@@ -106,5 +109,5 @@ function opf2pd(fileout::String, operatingdata_path::String, opfmodeldata::Dict,
   optimal_values[:Va] = reshape(readdlm(operatingdata_path * "Va.csv"), num_buses)
   optimal_values[:Pnet] = reshape(readdlm(operatingdata_path * "Pnet.csv"), num_buses)
   optimal_values[:Qnet] = reshape(readdlm(operatingdata_path * "Qnet.csv"), num_buses)
-  return opf2pd(fileout, optimal_values, opfmodeldata, phys)
+  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, phys)
 end
