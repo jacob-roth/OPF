@@ -36,7 +36,7 @@ function import_own_operatingpoint(powergrid::PowerGrid, optimal_values::Dict)
     Vm = optimal_values[:Vm]
 
     u_r = Vm .* cos.(Va)
-    u_i = Vm .* sin.(Vm)
+    u_i = Vm .* sin.(Va)
     ω = 0
 
     own_op = Array{Float64,1}(undef, num_vars)
