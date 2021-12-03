@@ -25,7 +25,7 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys:
     if opfmodeldata[:buses][i].bustype == 3
       V = optimal_values[:Vm][i]
       theta = optimal_values[:Va][i]
-      B["params"]["U"] = V * exp(im * theta)
+      B["params"]["U"] = real(V * exp(im * theta))
       B["type"] = "SlackAlgebraic"
 
     # generator
@@ -51,18 +51,20 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys:
   end
 
   # lines
-  FT = [Set([opfmodeldata[:lines][l].from, opfmodeldata[:lines][l].to]) for l in 1:nline]
+  from_to_pairs = Set{Tuple{Int, Int}}()
   for l = 1:nline
     f = opfmodeldata[:lines][l].from
     t = opfmodeldata[:lines][l].to
-    ft = Set([f,t])
-    dupes = [ft == x for x in FT]
-    if sum(dupes) > 1
-      continue
-    end
-
     ff = min(f,t) # need to have from.id <= to.id for PD lightgraphs dependency
     tt = max(f,t) # need to have from.id <= to.id for PD lightgraphs dependency
+
+    if (ff,tt) ∈ from_to_pairs
+      continue
+    else
+      new_pair = (ff,tt)
+      push!(from_to_pairs, new_pair)
+    end
+
     L = Dict()
     L["name"] = "branch" * string(l)
     L["params"] = Dict()
@@ -90,4 +92,19 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, phys:
     JSON.print(f, out, 1)
   end
   # return JSON.print(out, 1)
+end
+
+function opf2pd(fileout::String, operatingdata_path::String, opfmodeldata::Dict, phys::Dict=physDefault)
+  Y = opfmodeldata[:Y]
+  if isa(Y, AbstractArray{<:Complex})
+    opfmodeldata[:Y] = imag.(Y)
+  end
+
+  num_buses = opfmodeldata[:nbus]
+  optimal_values = Dict()
+  optimal_values[:Vm] = reshape(readdlm(operatingdata_path * "Vm.csv"), num_buses)
+  optimal_values[:Va] = reshape(readdlm(operatingdata_path * "Va.csv"), num_buses)
+  optimal_values[:Pnet] = reshape(readdlm(operatingdata_path * "Pnet.csv"), num_buses)
+  optimal_values[:Qnet] = reshape(readdlm(operatingdata_path * "Qnet.csv"), num_buses)
+  return opf2pd(fileout, optimal_values, opfmodeldata, phys)
 end
