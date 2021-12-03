@@ -2,13 +2,19 @@ using DelimitedFiles
 using PowerDynamics
 
 powergrid_path = "/"
-json_file = "ieee118_v5.json"
+json_file = "ieee118_v6.json"
 powergrid = read_powergrid(powergrid_path * json_file, Json)
 
 # Check branch data was entered correctly
 lines_arr = collect(values(powergrid.lines))
+line_types = Set([typeof(l) for l in lines_arr])
 branch_idx = [(parse(Int, l.from[4:end]), parse(Int, l.to[4:end])) for l in lines_arr]
-admittance = [(l.Y.re, l.Y.im) for l in lines_arr]
+if (length(line_types) == 1) & (first(line_types) == PiModelLine)
+    admittance = [(l.y.re, l.y.im) for l in lines_arr]
+    shunt = [(l.y_shunt_km, l.y_shunt_mk) for l in lines_arr]
+elseif (length(line_types) == 1) & (first(line_types) == StaticLine)
+    admittance = [(l.Y.re, l.Y.im) for l in lines_arr]
+end
 
 casefile_path = "/"
 branch_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.branch")
@@ -20,11 +26,15 @@ unpacked_deduped_branches = [(branch[1], branch[2]) for branch in deduped_branch
 @assert length(branch_idx) == length(unpacked_deduped_branches)
 @assert sort(branch_idx) == sort(unpacked_deduped_branches)
 
-admittance_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.Y", '\t', ComplexF64)
-Y_vec = [(real(admittance_file[branch_idx[line_idx][1], branch_idx[line_idx][2]]), -imag(admittance_file[branch_idx[line_idx][1], branch_idx[line_idx][2]])) 
-         for line_idx in 1:length(branch_idx)]
-
+Y_arr = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.Y", '\t', ComplexF64)
+Y_vec = [(real(Y_arr[line_pairs[1], line_pairs[2]]), -imag(Y_arr[line_pairs[1], line_pairs[2]])) for line_pairs in branch_idx]
 @assert admittance == Y_vec
+
+if (length(line_types) == 1) & (first(line_types) == PiModelLine)
+    shunt_vec = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.YshI") 
+    shunt_pairs = [(complex(0,shunt_vec[line_pairs[1]]), complex(0,shunt_vec[line_pairs[2]])) for line_pairs in branch_idx]
+    @assert shunt == shunt_pairs
+end
 
 # Check bus data was entered correctly
 operatingdata_path = "/"
