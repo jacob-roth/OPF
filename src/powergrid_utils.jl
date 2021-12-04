@@ -26,6 +26,24 @@ function get_num_vars(type_dict::Dict{Type{<:AbstractNode}, Int})
     return num_vars
 end
 
+function get_cumulative_num_vars(powergrid::PowerGrid)
+    nodes = powergrid.nodes
+    bus_array = collect(values(nodes))
+    bus_types = typeof.(bus_array)
+
+    cumulative_num_vars = Int[]
+    var_idx = 1
+    for bus_type in bus_types
+        push!(cumulative_num_vars, var_idx)
+        if bus_type == SwingEq
+            var_idx += 3
+        else
+            var_idx += 2
+        end
+    end
+    return cumulative_num_vars
+end
+
 # Import operatingpoint from FPACOPF into PowerDynamics framework
 function import_own_operatingpoint(powergrid::PowerGrid, optimal_values::Dict)
     nodes = powergrid.nodes

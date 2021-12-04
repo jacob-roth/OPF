@@ -4,7 +4,8 @@ const physDefault[:H] = 0.0531 * physDefault[:Ω] / 2 # M*Ω/2
 const physDefault[:Dg] = 0.05
 const physDefault[:Dv] = 0.005
 # opf2pd("/Users/jakeroth/git/OPF/test/test.json", optimal_values, opfmodeldata, phys)
-function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_type::String, phys::Dict = physDefault)
+function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_type::String, 
+                phys::Dict = physDefault)
   # setup
   @assert line_type ∈ Set(["StaticLine", "PiModelLine"])
   nbus = length(optimal_values[:Vm])
@@ -97,7 +98,9 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
   # return JSON.print(out, 1)
 end
 
-function opf2pd(fileout::String, operatingdata_path::String, opfmodeldata::Dict, line_type::String, phys::Dict=physDefault)
+function opf2pd(fileout::String, operatingdata_path::String, 
+                opfmodeldata::Dict, line_type::String, 
+                phys::Dict=physDefault)
   Y = opfmodeldata[:Y]
   if isa(Y, AbstractArray{<:Complex})
     opfmodeldata[:Y] = imag.(Y)
@@ -109,5 +112,42 @@ function opf2pd(fileout::String, operatingdata_path::String, opfmodeldata::Dict,
   optimal_values[:Va] = reshape(readdlm(operatingdata_path * "Va.csv"), num_buses)
   optimal_values[:Pnet] = reshape(readdlm(operatingdata_path * "Pnet.csv"), num_buses)
   optimal_values[:Qnet] = reshape(readdlm(operatingdata_path * "Qnet.csv"), num_buses)
+  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, phys)
+end
+
+function opf2pd(fileout::String, casedata_path::String, operatingdata_path::String, 
+                opfmodeldata::Dict, line_type::String, 
+                phys::Dict=physDefault)
+  Y = opfmodeldata[:Y]
+  if isa(Y, AbstractArray{<:Complex})
+    opfmodeldata[:Y] = imag.(Y)
+  end
+
+  num_buses = opfmodeldata[:nbus]
+  optimal_values = Dict()
+  optimal_values[:Vm] = reshape(readdlm(operatingdata_path * "Vm.csv"), num_buses)
+  optimal_values[:Va] = reshape(readdlm(operatingdata_path * "Va.csv"), num_buses)
+
+  bus_file = readdlm(casedata_path * "mpc_lowdamp_pgliblimits.bus")
+  gen_file = readdlm(casedata_path * "pglib_opf_case118_ieee_lowdamp.gen")
+  baseMVA = 100.0
+
+  bus_type = Int.(bus_file[:,2])
+  Pd = bus_file[:,3] / baseMVA
+  Qd = bus_file[:,4] / baseMVA
+  gen_id = Int.(gen_file[:,1])
+  Pg = gen_file[:,2] / baseMVA
+  Qg = gen_file[:,3] / baseMVA
+
+  Pnet = -Pd
+  Qnet = -Qd
+  for idx in 1:length(gen_id)
+    if bus_type[gen_id[idx]] == 2
+      Pnet[gen_id[idx]] += Pg[idx]
+      Qnet[gen_id[idx]] += Qg[idx]
+    end
+  end
+  optimal_values[:Pnet] = Pnet
+  optimal_values[:Qnet] = Qnet
   return opf2pd(fileout, optimal_values, opfmodeldata, line_type, phys)
 end
