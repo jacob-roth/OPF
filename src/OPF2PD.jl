@@ -7,7 +7,7 @@ const physDefault[:Dv] = 0.005
 function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_type::String, 
                 phys::Dict = physDefault)
   # setup
-  @assert line_type ∈ Set(["StaticLine", "PiModelLine"])
+  @assert line_type ∈ Set(["StaticLine", "PiModelLine", "PiModelLineTapratio"])
   nbus = length(optimal_values[:Vm])
   nline = length(opfmodeldata[:lines])
   out = Dict()
@@ -79,8 +79,16 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
       L["params"]["y"]["im"] = -opfmodeldata[:Y][ff, tt]
       L["params"]["y_shunt_km"] = complex(0.0, opfmodeldata[:YshI][ff])
       L["params"]["y_shunt_mk"] = complex(0.0, opfmodeldata[:YshI][tt])
-      # L["params"]["t_shunt_km"] =
-      # L["params"]["t_shunt_mk"] = 
+    elseif line_type == "PiModelLineTapratio"
+      L["params"]["y"] = Dict()
+      L["params"]["y"]["re"] = 0.0
+      L["params"]["y"]["im"] = -opfmodeldata[:Y][ff, tt]
+      L["params"]["y_shunt_km"] = complex(0.0, opfmodeldata[:YshI][ff])
+      L["params"]["y_shunt_mk"] = complex(0.0, opfmodeldata[:YshI][tt])
+      tap = (opfmodeldata[:lines][l].ratio == 0) ? (1.0) : (opfmodeldata[:lines][l].ratio)
+      tap *= exp(opfmodeldata[:lines][l].angle * pi/180 * im)
+      L["params"]["t_shunt_km"] = tap
+      L["params"]["t_shunt_mk"] = tap
     else
       L["params"]["Y"] = Dict()
       L["params"]["Y"]["re"] = 0.0
