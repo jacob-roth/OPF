@@ -52,9 +52,12 @@ function import_own_operatingpoint(powergrid::PowerGrid, optimal_values::Dict)
 
     Va = optimal_values[:Va]
     Vm = optimal_values[:Vm]
+    v = Vm .* exp.(im .* Va)
 
-    u_r = Vm .* cos.(Va)
-    u_i = Vm .* sin.(Va)
+    # u_r = Vm .* cos.(Va)
+    # u_i = Vm .* sin.(Va)
+    u_r = real.(v)
+    u_i = imag.(v)
     ω = 0
 
     own_op = Array{Float64,1}(undef, num_vars)
@@ -73,6 +76,36 @@ function import_own_operatingpoint(powergrid::PowerGrid, optimal_values::Dict)
         end
     end
     return own_op
+end
+
+function get_components(operationpoint::State)
+    powergrid = operationpoint.grid
+    point = operationpoint.vec
+    nodes = powergrid.nodes
+    type_dict = get_type_dict(powergrid)
+    num_vars = get_num_vars(type_dict)
+
+    # nswing = sum(typeof(nodes[k]) == SwingEq for k in keys(nodes))
+    # npq = length(nodes) - ngen
+    nbus = length(nodes)
+    omega = zeros(nbus)
+    ur = zeros(nbus)
+    ui = zeros(nbus)
+    vec_idx = 0
+    for node_idx = 1:length(nodes)
+        node = nodes["bus$node_idx"]
+        if isa(node, SwingEq)
+            ur[node_idx] = point[vec_idx+1]
+            ui[node_idx] = point[vec_idx+2]
+            omega[node_idx] = point[vec_idx+3]
+            vec_idx += 3
+        else
+            ur[node_idx] = point[vec_idx+1]
+            ui[node_idx] = point[vec_idx+2]
+            vec_idx += 2
+        end
+    end
+    return omega, ur, ui
 end
 
 function import_own_operatingpoint(powergrid::PowerGrid, operatingdata_path::String)
