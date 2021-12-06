@@ -6,7 +6,8 @@ function DefaultOptions()
   D[:lossless]       = false   ## lossless transmission lines?
   D[:loss_scale]     = 1.0     ## scaling of real component of admittance elements
   D[:current_rating] = false   ## use |i| for line limits?
-  D[:remove_Bshunt]  = false   ## remove susceptance from shunt?
+  D[:nonneg_Bshunt]  = false   ## make bus shunts nonnegative?
+  D[:remove_Bshunt]  = false   ## remove bus and line shunts?
   D[:remove_tap]     = false   ## remove tap adjustments?
   D[:print_level]    = 0       ## 0: no printing
   D[:feasibility]    = false   ## feasibility problem only (no OPF objective)?
