@@ -3,11 +3,13 @@ const physDefault[:Ω] = 2 * π * 50
 const physDefault[:H] = 0.0531 * physDefault[:Ω] / 2 # M*Ω/2
 const physDefault[:Dg] = 0.05
 const physDefault[:Dv] = 0.005
+const physDefault[:Γ] = 1e-3
 # opf2pd("/Users/jakeroth/git/OPF/test/test.json", optimal_values, opfmodeldata, phys)
-function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_type::String, 
+function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_type::String, bus_type::String,
                 phys::Dict = physDefault)
   # setup
   @assert line_type ∈ Set(["StaticLine", "PiModelLine", "PiModelLineTapratio"])
+  @assert bus_type ∈ Set(["SwingEq", "SwingEqLVS"])
   nbus = length(optimal_values[:Vm])
   nline = length(opfmodeldata[:lines])
   lines = opfmodeldata[:lines]
@@ -35,13 +37,23 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
 
     # generator
     elseif opfmodeldata[:buses][i].bustype == 2
-      B["params"]["P"] = +1optimal_values[:Pnet][i]
-      # B["params"]["Q"] = optimal_values[:Qnet][i]
-      # B["params"]["V"] = optimal_values[:Vm][i]
-      B["params"]["H"] = phys[:H]
-      B["params"]["D"] = phys[:Dg]
-      B["params"]["Ω"] = phys[:Ω]
-      B["type"] = "SwingEq"
+      if bus_type == "SwingEq"
+        B["params"]["P"] = +1optimal_values[:Pnet][i]
+        # B["params"]["Q"] = optimal_values[:Qnet][i]
+        # B["params"]["V"] = optimal_values[:Vm][i]
+        B["params"]["H"] = phys[:H]
+        B["params"]["D"] = phys[:Dg]
+        B["params"]["Ω"] = phys[:Ω]
+        B["type"] = "SwingEq"
+      elseif bus_type == "SwingEqLVS"
+        B["params"]["P"] = +1optimal_values[:Pnet][i]
+        B["params"]["H"] = phys[:H]
+        B["params"]["D"] = phys[:Dg]
+        B["params"]["Ω"] = phys[:Ω]
+        B["params"]["Γ"] = phys[:Γ]
+        B["params"]["V"] = optimal_values[:Vm][i] * exp(im * optimal_values[:Va][i])
+        B["type"] = "SwingEqLVS"
+      end
 
     # load
     elseif opfmodeldata[:buses][i].bustype == 1
@@ -136,7 +148,7 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
 end
 
 function opf2pd(fileout::String, operatingdata_path::String, 
-                opfmodeldata::Dict, line_type::String, 
+                opfmodeldata::Dict, line_type::String, bus_type::String,
                 phys::Dict=physDefault)
   Y = opfmodeldata[:Y]
   if isa(Y, AbstractArray{<:Complex})
@@ -149,11 +161,11 @@ function opf2pd(fileout::String, operatingdata_path::String,
   optimal_values[:Va] = reshape(readdlm(operatingdata_path * "Va.csv"), num_buses)
   optimal_values[:Pnet] = reshape(readdlm(operatingdata_path * "Pnet.csv"), num_buses)
   optimal_values[:Qnet] = reshape(readdlm(operatingdata_path * "Qnet.csv"), num_buses)
-  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, phys)
+  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, bus_type, phys)
 end
 
 function opf2pd(fileout::String, casedata_path::String, operatingdata_path::String, 
-                opfmodeldata::Dict, line_type::String, 
+                opfmodeldata::Dict, line_type::String, bus_type::String,
                 phys::Dict=physDefault)
   Y = opfmodeldata[:Y]
   if isa(Y, AbstractArray{<:Complex})
@@ -169,7 +181,7 @@ function opf2pd(fileout::String, casedata_path::String, operatingdata_path::Stri
   gen_file = readdlm(casedata_path * "pglib_opf_case118_ieee_lowdamp.gen")
   baseMVA = 100.0
 
-  bus_type = Int.(bus_file[:,2])
+  bus_type_file = Int.(bus_file[:,2])
   Pd = bus_file[:,3] / baseMVA
   Qd = bus_file[:,4] / baseMVA
   gen_id = Int.(gen_file[:,1])
@@ -179,14 +191,14 @@ function opf2pd(fileout::String, casedata_path::String, operatingdata_path::Stri
   Pnet = -Pd
   Qnet = -Qd
   for idx in 1:length(gen_id)
-    if bus_type[gen_id[idx]] == 2
+    if bus_type_file[gen_id[idx]] == 2
       Pnet[gen_id[idx]] += Pg[idx]
       Qnet[gen_id[idx]] += Qg[idx]
     end
   end
   optimal_values[:Pnet] = Pnet
   optimal_values[:Qnet] = Qnet
-  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, phys)
+  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, bus_type, phys)
 end
 
 
