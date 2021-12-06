@@ -475,6 +475,7 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
     lossless       = options[:lossless]
     current_rating = options[:current_rating]
     remove_Bshunt  = options[:remove_Bshunt]
+    nonneg_Bshunt  = options[:nonneg_Bshunt]
     remove_tap     = options[:remove_tap]
     loss_scale     = options[:loss_scale]
     print_level    = options[:print_level]
@@ -497,7 +498,7 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
 
     # branch admitances
     YffR,YffI,YttR,YttI,YftR,YftI,YtfR,YtfI,YshR,YshI = computeAdmitances(lines, buses, baseMVA;
-                                                        lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap, loss_scale=loss_scale)
+                                                        lossless=lossless, remove_Bshunt=remove_Bshunt, remove_tap=remove_tap, loss_scale=loss_scale, nonneg_Bshunt=nonneg_Bshunt)
     Y = computeAdmittanceMatrix(opfdata, options)
 
     # helpful quantities
