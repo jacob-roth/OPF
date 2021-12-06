@@ -10,6 +10,9 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
   @assert line_type ∈ Set(["StaticLine", "PiModelLine", "PiModelLineTapratio"])
   nbus = length(optimal_values[:Vm])
   nline = length(opfmodeldata[:lines])
+  lines = opfmodeldata[:lines]
+  buses = opfmodeldata[:buses]
+  baseMVA = opfmodeldata[:baseMVA]
   out = Dict()
   out["nodes"] = []
   out["lines"] = []
@@ -74,11 +77,19 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
     L["params"]["to"] = "bus" * string(tt)
     L["type"] = line_type
     if line_type == "PiModelLine"
+      y = Ys = 1/(lines[l].x*im)
+      y_shunt_km = im*(lines[l].b/2 + (buses[ff].Bs / baseMVA))
+      y_shunt_mk = im*(lines[l].b/2 + (buses[tt].Bs / baseMVA))
       L["params"]["y"] = Dict()
-      L["params"]["y"]["re"] = 0.0
-      L["params"]["y"]["im"] = -opfmodeldata[:Y][ff, tt]
-      L["params"]["y_shunt_km"] = complex(0.0, opfmodeldata[:YshI][ff])
-      L["params"]["y_shunt_mk"] = complex(0.0, opfmodeldata[:YshI][tt])
+      L["params"]["y"]["re"] = +1real(y) # -1 +1 -1 +1
+      L["params"]["y"]["im"] = +1imag(y) # +1 +1 -1 -1
+      L["params"]["y_shunt_km"] = +1y_shunt_km # -1 +1 -1 +1
+      L["params"]["y_shunt_mk"] = +1y_shunt_mk # +1 +1 -1 -1
+      # L["params"]["y"] = Dict()
+      # L["params"]["y"]["re"] = 0.0
+      # L["params"]["y"]["im"] = -opfmodeldata[:Y][ff, tt]
+      # L["params"]["y_shunt_km"] = complex(0.0, opfmodeldata[:YshI][ff])
+      # L["params"]["y_shunt_mk"] = complex(0.0, opfmodeldata[:YshI][tt])
     elseif line_type == "PiModelLineTapratio"
       L["params"]["y"] = Dict()
       L["params"]["y"]["re"] = 0.0
