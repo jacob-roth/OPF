@@ -476,6 +476,7 @@ function get_opfmodeldata(opfdata::OPFData, options::Dict=DefaultOptions(), adju
     current_rating = options[:current_rating]
     remove_Bshunt  = options[:remove_Bshunt]
     nonneg_Bshunt  = options[:nonneg_Bshunt]
+    nobus_Bshunt  = options[:nobus_Bshunt]
     remove_tap     = options[:remove_tap]
     loss_scale     = options[:loss_scale]
     print_level    = options[:print_level]
