@@ -14,6 +14,8 @@ include("../src/OPF.jl"); using DelimitedFiles
 ## data input
 ## -----------------------------------------------------------------------------
 
+include("/Users/jakeroth/git/OPF/src/OPF2PD.jl")
+
 options = DefaultOptions()
 options[:emergencylimit] = NaN
 options[:ratelimit]      = NaN
