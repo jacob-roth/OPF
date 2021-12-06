@@ -67,31 +67,42 @@ function get_Pnet_and_Qnet(operatingdata_path::String, powergrid::PowerGrid)
     return Pnet, Qnet
 end
 
+function get_Vm_and_Va(operatingdata_path::String, powergrid::PowerGrid)
+    nodes = powergrid.nodes
+    num_nodes = length(nodes)
+    Vm = reshape(readdlm(operatingdata_path * "Vm.csv"), num_nodes)
+    Va = reshape(readdlm(operatingdata_path * "Va.csv"), num_nodes)
+    return Vm, Va
+end
+
 # Check bus data was entered correctly
-function check_bus_data(casefile_path::String, operatingdata_path::String, powergrid::PowerGrid; 
-                        Ω::Real, H::Real, D::Real)
+function check_bus_data(casefile_path::String, operatingdata_path::String, powergrid::PowerGrid,
+                        Ω::Real, H::Real, D::Real, Γ::Real)
     bus_types = get_bus_types(casefile_path)
     Pnet, Qnet = get_Pnet_and_Qnet(operatingdata_path, powergrid)
+    Vm, Va = get_Vm_and_Va(operatingdata_path, powergrid)
     nodes = powergrid.nodes
 
     for idx in 1:length(nodes)
-        try 
-            node = nodes[idx]
-            if isa(node, SwingEq)
-                @assert bus_types[idx] == 2
-                @assert node.P == Pnet[idx]
-                @assert node.H == H
-                @assert node.Ω == Ω
-                @assert node.D == D
-            elseif isa(node, PQAlgebraic)
-                @assert bus_types[idx] == 1
-                @assert node.P == Pnet[idx]
-                @assert node.Q == Qnet[idx]
-            end
-        catch e
-            if isa(e, AssertionError)
-                println("idx:", idx)
-            end
+        node = nodes["bus$idx"]
+        if isa(node, SwingEq)
+            @assert bus_types[idx] == 2
+            @assert node.P == Pnet[idx]
+            @assert node.H == H
+            @assert node.Ω == Ω
+            @assert node.D == D
+        elseif isa(node, PQAlgebraic)
+            @assert bus_types[idx] == 1
+            @assert node.P == Pnet[idx]
+            @assert node.Q == Qnet[idx]
+        elseif isa(node, SwingEqLVS)
+            @assert bus_types[idx] == 2
+            @assert node.P == Pnet[idx]
+            @assert node.H == H
+            @assert node.Ω == Ω
+            @assert node.D == D
+            @assert node.Γ == Γ
+            @assert node.V == Vm[idx] * exp(im*Va[idx])
         end
     end
 end

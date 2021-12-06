@@ -2,6 +2,8 @@
 # symbolsof(pq) == [:u_r, :u_i]
 # symbolsof(swing) == [:u_r, :u_i, :ω]
 # symbolsof(slack) == [:u_r, :u_i]
+# symbolsof(swing_lvs) == [:u_r, :u_i, :ω]
+
 function get_type_dict(powergrid::PowerGrid)
     nodes = powergrid.nodes
     bus_array = collect(values(nodes))
@@ -19,7 +21,7 @@ end
 
 # Get number of variables for the operatingpoint
 function get_num_vars(type_dict::Dict{Type{<:AbstractNode}, Int})
-    num_gens = type_dict[SwingEq]
+    num_gens = haskey(type_dict, SwingEq) ? type_dict[SwingEq] : type_dict[SwingEqLVS]
     num_loads = type_dict[PQAlgebraic]
     num_slack = type_dict[SlackAlgebraic]
     num_vars = (num_gens * 3) + (num_loads * 2) + (num_slack * 2) 
@@ -35,7 +37,7 @@ function get_cumulative_num_vars(powergrid::PowerGrid)
     var_idx = 1
     for bus_type in bus_types
         push!(cumulative_num_vars, var_idx)
-        if bus_type == SwingEq
+        if (bus_type == SwingEq) | (bus_type == SwingEqLVS)
             var_idx += 3
         else
             var_idx += 2
@@ -64,7 +66,7 @@ function import_own_operatingpoint(powergrid::PowerGrid, optimal_values::Dict)
     vec_idx = 1
     for node_idx = 1:length(nodes)
         node = nodes["bus$node_idx"]
-        if isa(node, SwingEq)
+        if isa(node, SwingEq) | isa(node, SwingEqLVS)
             own_op[vec_idx] = u_r[node_idx]
             own_op[vec_idx+1] = u_i[node_idx]
             own_op[vec_idx+2] = ω
@@ -78,6 +80,17 @@ function import_own_operatingpoint(powergrid::PowerGrid, optimal_values::Dict)
     return own_op
 end
 
+function import_own_operatingpoint(powergrid::PowerGrid, operatingdata_path::String)
+    nodes = powergrid.nodes
+    num_buses = length(nodes)
+
+    optimal_values = Dict()
+    optimal_values[:Va] = reshape(readdlm(operatingdata_path * "Va.csv"), num_buses)
+    optimal_values[:Vm] = reshape(readdlm(operatingdata_path * "Vm.csv"), num_buses)
+
+    return import_own_operatingpoint(powergrid, optimal_values)
+end
+
 function vecidx2busvar(seek_vec_idx,operationpoint::State)
     powergrid = operationpoint.grid
     point = operationpoint.vec
@@ -87,7 +100,7 @@ function vecidx2busvar(seek_vec_idx,operationpoint::State)
     vec_idx = 0
     for node_idx = 1:length(nodes)
         node = nodes["bus$node_idx"]
-        if isa(node, SwingEq)
+        if isa(node, SwingEq) | isa(node, SwingEqLVS)
             if seek_vec_idx == vec_idx+1
                 return "bus$node_idx" * "_ur"
             elseif seek_vec_idx == vec_idx+2
@@ -107,7 +120,6 @@ function vecidx2busvar(seek_vec_idx,operationpoint::State)
     end
 end
 
-
 function get_components(operationpoint::State)
     powergrid = operationpoint.grid
     point = operationpoint.vec
@@ -124,7 +136,7 @@ function get_components(operationpoint::State)
     vec_idx = 0
     for node_idx = 1:length(nodes)
         node = nodes["bus$node_idx"]
-        if isa(node, SwingEq)
+        if isa(node, SwingEq) | isa(node, SwingEqLVS)
             ur[node_idx] = point[vec_idx+1]
             ui[node_idx] = point[vec_idx+2]
             omega[node_idx] = point[vec_idx+3]
@@ -136,17 +148,6 @@ function get_components(operationpoint::State)
         end
     end
     return omega, ur, ui
-end
-
-function import_own_operatingpoint(powergrid::PowerGrid, operatingdata_path::String)
-    nodes = powergrid.nodes
-    num_buses = length(nodes)
-
-    optimal_values = Dict()
-    optimal_values[:Va] = reshape(readdlm(operatingdata_path * "Va.csv"), num_buses)
-    optimal_values[:Vm] = reshape(readdlm(operatingdata_path * "Vm.csv"), num_buses)
-
-    return import_own_operatingpoint(powergrid, optimal_values)
 end
 
 function err_from_root(powergrid::PowerGrid, operatingpoint_vec::AbstractArray)
