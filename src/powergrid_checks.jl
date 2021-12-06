@@ -43,10 +43,10 @@ function check_admittance_and_shunts(casefile_path::String, powergrid::PowerGrid
     line_types = get_line_types(powergrid)
     if (length(line_types) == 1) & (first(line_types) == PiModelLine)
         pg_admittance, pg_shunt = get_pg_admittance_and_shunt(line_types)
-        shunt_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.YshI") 
-        shunt_vec = [(complex(0,shunt_file[line_pairs[1]]), complex(0,shunt_file[line_pairs[2]])) for line_pairs in pg_branches]
+        y_shunt_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.y_shunt_arr", '\t', ComplexF64) 
+        y_shunt_vec = [(y_shunt_file[line_pairs[1], line_pairs[2]], y_shunt_file[line_pairs[2], line_pairs[1]]) for line_pairs in pg_branches]
         @assert pg_admittance == Y_vec
-        @assert pg_shunt == shunt_vec
+        @assert pg_shunt == y_shunt_vec
     elseif (length(line_types) == 1) & (first(line_types) == StaticLine)
         pg_admittance = get_pg_admittance_and_shunt(line_types)
         @assert pg_admittance == Y_vec

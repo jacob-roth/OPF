@@ -82,8 +82,8 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
       # y = Ys = 1/(lines[l].x*im)
       # y_shunt_km = im*(lines[l].b/2 + (buses[ff].Bs / baseMVA))
       # y_shunt_mk = im*(lines[l].b/2 + (buses[tt].Bs / baseMVA))
-      from_bus = f # are these correct or do they need to depend on whether t,f are swapped
-      to_bus = t # are these correct or do they need to depend on whether t,f are swapped
+      from_bus = (f == ff) ? f : t # are these correct or do they need to depend on whether t,f are swapped
+      to_bus = (t == tt) ? t : f # are these correct or do they need to depend on whether t,f are swapped
     
       line_b = sum(lines[(lines.from .== from_bus) .& (lines.to .== to_bus)].b) # duplicate line shunts
       from_Bs = first(buses[buses.bus_i .== from_bus].Bs) # don't sum bus shunts
