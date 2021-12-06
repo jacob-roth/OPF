@@ -78,6 +78,36 @@ function import_own_operatingpoint(powergrid::PowerGrid, optimal_values::Dict)
     return own_op
 end
 
+function vecidx2busvar(seek_vec_idx,operationpoint::State)
+    powergrid = operationpoint.grid
+    point = operationpoint.vec
+    nodes = powergrid.nodes
+    type_dict = get_type_dict(powergrid)
+    num_vars = get_num_vars(type_dict)
+    vec_idx = 0
+    for node_idx = 1:length(nodes)
+        node = nodes["bus$node_idx"]
+        if isa(node, SwingEq)
+            if seek_vec_idx == vec_idx+1
+                return "bus$node_idx" * "_ur"
+            elseif seek_vec_idx == vec_idx+2
+                return "bus$node_idx" * "_ui"
+            elseif seek_vec_idx == vec_idx+3
+                return "bus$node_idx" * "_omega"
+            end
+            vec_idx += 3
+        else
+            if seek_vec_idx == vec_idx+1
+                return "bus$node_idx" * "_ur"
+            elseif seek_vec_idx == vec_idx+2
+                return "bus$node_idx" * "_ui"
+            end
+            vec_idx += 2
+        end
+    end
+end
+
+
 function get_components(operationpoint::State)
     powergrid = operationpoint.grid
     point = operationpoint.vec
