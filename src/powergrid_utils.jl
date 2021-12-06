@@ -138,3 +138,48 @@ function import_initial_contingencies(ic_file_path::String)
     ic_ID_vec = [(Int(ic_ID_arr[ic_idx,1]), Int(ic_ID_arr[ic_idx,2])) for ic_idx in 1:num_ics]
     return ic_ID_vec
 end
+
+function simulate_initial_contingencies(ic_ID_vec::AbstractArray{NTuple{N,Int}}, 
+                                        timespan::Tuple{Real, Real}, tspan_fault::Tuple{Real, Real}, 
+                                        powergrid::PowerGrid, operationpoint::State,
+                                        timespan_cap::Real=20.0, resolution::Real=1e-3) where {N}
+    results_dict = Dict()
+    for ic_ID in ic_ID_vec
+        branches = collect("branch" .* string.(ic_ID))
+        fault = LineFailures(line_names=branches, tspan_fault=tspan_fault)
+        fault_solution = simulate(fault, powergrid, operationpoint, timespan);
+        generator_indices = findall(bus -> isa(bus, SwingEq), collect(values(powergrid.nodes)))
+        generator_names = "bus" .* string.(generator_indices)
+        
+        results_dict[(ic_ID,:v)] = fault_solution(timespan[1]:resolution:timespan_cap, :, :v)[generator_indices,:]
+        results_dict[(ic_ID,:p)] = fault_solution(timespan[1]:resolution:timespan_cap, :, :p)[generator_indices,:]
+        results_dict[(ic_ID,:q)] = fault_solution(timespan[1]:resolution:timespan_cap, :, :q)[generator_indices,:]
+        results_dict[(ic_ID,:ω)] = fault_solution(timespan[1]:resolution:timespan_cap, generator_names, :ω)
+    end
+    return results_dict
+end
+
+function get_abs_delta(results_dict::Dict)
+    abs_delta_dict = Dict()
+    for (ic_ID, variable) in keys(results_dict)
+        results_arr = results_dict[(ic_ID, variable)]
+        abs_delta_arr = abs.((results_arr[:, 2:end] - results_arr[:, 1:end-1]) ./ results_arr[:, 1:end-1])
+        abs_delta_dict[(ic_ID, variable)] = abs_delta_arr
+    end
+    return abs_delta_dict
+end
+
+function findall_big_delta(abs_delta_dict::Dict, tol::Real=0.01)
+    all_big_delta_dict = Dict()
+    for (ic_ID, variable) in keys(abs_delta_dict)
+        abs_delta_arr = abs_delta_dict[(ic_ID, variable)]
+        num_rows = size(abs_delta_arr,1)
+        all_big_delta_idx = Array{Any}(undef, num_rows)
+        for row_idx in 1:num_rows
+            row = abs_delta_arr[row_idx,:]
+            all_big_delta_idx[row_idx] = findall(delta -> delta >= tol, row)
+        end
+        all_big_delta_dict[(ic_ID, variable)] = all_big_delta_idx
+    end
+    return all_big_delta_dict
+end
