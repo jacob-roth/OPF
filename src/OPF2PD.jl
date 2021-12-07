@@ -3,10 +3,10 @@ const physDefault[:Ω] = 2 * π * 50
 const physDefault[:H] = 0.0531 * physDefault[:Ω] / 2 # M*Ω/2
 const physDefault[:Dg] = 0.05
 const physDefault[:Dv] = 0.005
-const physDefault[:Γ] = 1e-3
+const physDefault[:Γ] = 1e-6
 # opf2pd("/Users/jakeroth/git/OPF/test/test.json", optimal_values, opfmodeldata, phys)
 function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_type::String, bus_type::String,
-                phys::Dict = physDefault)
+                nobus_Bshunt::Bool=false, phys::Dict = physDefault)
   # setup
   @assert line_type ∈ Set(["StaticLine", "PiModelLine", "PiModelLineTapratio"])
   @assert bus_type ∈ Set(["SwingEq", "SwingEqLVS"])
@@ -102,8 +102,8 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
       # if isinf(line_b)
       #   line_b=0
       # end
-      from_Bs = first(buses[buses.bus_i .== from_bus].Bs) # don't sum bus shunts
-      to_Bs = first(buses[buses.bus_i .== to_bus].Bs) # don't sum bus shunts
+      from_Bs = nobus_Bshunt ? 0.0 : first(buses[buses.bus_i .== from_bus].Bs) # don't sum bus shunts
+      to_Bs = nobus_Bshunt ? 0.0 : first(buses[buses.bus_i .== to_bus].Bs) # don't sum bus shunts
       # from_Bs = sum(buses[buses.bus_i .== from_bus].Bs)
       # to_Bs = sum(buses[buses.bus_i .== to_bus].Bs)
       y_shunt_km = im*(line_b / 2 + (from_Bs / baseMVA))
@@ -149,7 +149,7 @@ end
 
 function opf2pd(fileout::String, operatingdata_path::String, 
                 opfmodeldata::Dict, line_type::String, bus_type::String,
-                phys::Dict=physDefault)
+                nobus_Bshunt::Bool=false, phys::Dict=physDefault)
   Y = opfmodeldata[:Y]
   if isa(Y, AbstractArray{<:Complex})
     opfmodeldata[:Y] = imag.(Y)
@@ -161,12 +161,12 @@ function opf2pd(fileout::String, operatingdata_path::String,
   optimal_values[:Va] = reshape(readdlm(operatingdata_path * "Va.csv"), num_buses)
   optimal_values[:Pnet] = reshape(readdlm(operatingdata_path * "Pnet.csv"), num_buses)
   optimal_values[:Qnet] = reshape(readdlm(operatingdata_path * "Qnet.csv"), num_buses)
-  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, bus_type, phys)
+  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, bus_type, nobus_Bshunt, phys)
 end
 
 function opf2pd(fileout::String, casedata_path::String, operatingdata_path::String, 
                 opfmodeldata::Dict, line_type::String, bus_type::String,
-                phys::Dict=physDefault)
+                nobus_Bshunt::Bool=false, phys::Dict=physDefault)
   Y = opfmodeldata[:Y]
   if isa(Y, AbstractArray{<:Complex})
     opfmodeldata[:Y] = imag.(Y)
@@ -198,7 +198,7 @@ function opf2pd(fileout::String, casedata_path::String, operatingdata_path::Stri
   end
   optimal_values[:Pnet] = Pnet
   optimal_values[:Qnet] = Qnet
-  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, bus_type, phys)
+  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, bus_type, nobus_Bshunt, phys)
 end
 
 
