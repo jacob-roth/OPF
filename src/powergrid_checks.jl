@@ -35,15 +35,23 @@ function check_branch_idx(casefile_path::String, powergrid::PowerGrid)
 end
 
 # Check branch admittance and shunts were entered correctly
-function check_admittance_and_shunts(casefile_path::String, powergrid::PowerGrid)
+function check_admittance_and_shunts(casefile_path::String, powergrid::PowerGrid, nobus_Bshunt::Bool=false)
     pg_branches = get_pg_branches(powergrid)
-    Y_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.Y", '\t', ComplexF64)
+    if nobus_Bshunt
+        Y_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.Y_nobus_yesbranch", '\t', ComplexF64)
+    else
+        Y_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.Y", '\t', ComplexF64)
+    end
     Y_vec = [(real(Y_file[line_pairs[1], line_pairs[2]]), -imag(Y_file[line_pairs[1], line_pairs[2]])) for line_pairs in pg_branches]
 
     line_types = get_line_types(powergrid)
     if (length(line_types) == 1) & (first(line_types) == PiModelLine)
         pg_admittance, pg_shunt = get_pg_admittance_and_shunt(line_types)
-        y_shunt_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.y_shunt_arr", '\t', ComplexF64) 
+        if nobus_Bshunt
+            y_shunt_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.y_shunt_nobus_Bshunt_arr", '\t', ComplexF64)  
+        else
+            y_shunt_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.y_shunt_arr", '\t', ComplexF64) 
+        end
         y_shunt_vec = [(y_shunt_file[line_pairs[1], line_pairs[2]], y_shunt_file[line_pairs[2], line_pairs[1]]) for line_pairs in pg_branches]
         @assert pg_admittance == Y_vec
         @assert pg_shunt == y_shunt_vec
