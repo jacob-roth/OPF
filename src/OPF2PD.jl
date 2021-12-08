@@ -69,8 +69,22 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
 
   ## best so far
   # lines
+  if haskey(optimal_values, :ic_IDs)
+    ic_IDs = optimal_values[:ic_IDs]
+    println("Initial contingencies: ", ic_IDs)
+  else
+    ic_IDs = Set()
+  end
+
+  if haskey(optimal_values, :IDs) 
+    failed_line = optimal_values[:IDs]
+    println("Failed line: ", failed_line)
+  else
+    failed_line = Set()
+  end
+
   from_to_pairs = Set{Tuple{Int, Int}}()
-  for l = 1:nline
+  for l = setdiff(1:nline, failed_line, ic_IDs)
     f = opfmodeldata[:lines][l].from
     t = opfmodeldata[:lines][l].to
     ff = min(f,t) # need to have from.id <= to.id for PD lightgraphs dependency
@@ -163,47 +177,6 @@ function opf2pd(fileout::String, operatingdata_path::String,
   optimal_values[:Qnet] = reshape(readdlm(operatingdata_path * "Qnet.csv"), num_buses)
   return opf2pd(fileout, optimal_values, opfmodeldata, line_type, bus_type, nobus_Bshunt, phys)
 end
-
-function opf2pd(fileout::String, casedata_path::String, operatingdata_path::String, 
-                opfmodeldata::Dict, line_type::String, bus_type::String,
-                nobus_Bshunt::Bool=false, phys::Dict=physDefault)
-  Y = opfmodeldata[:Y]
-  if isa(Y, AbstractArray{<:Complex})
-    opfmodeldata[:Y] = imag.(Y)
-  end
-
-  num_buses = opfmodeldata[:nbus]
-  optimal_values = Dict()
-  optimal_values[:Vm] = reshape(readdlm(operatingdata_path * "Vm.csv"), num_buses)
-  optimal_values[:Va] = reshape(readdlm(operatingdata_path * "Va.csv"), num_buses)
-
-  bus_file = readdlm(casedata_path * "mpc_lowdamp_pgliblimits.bus")
-  gen_file = readdlm(casedata_path * "pglib_opf_case118_ieee_lowdamp.gen")
-  baseMVA = 100.0
-
-  bus_type_file = Int.(bus_file[:,2])
-  Pd = bus_file[:,3] / baseMVA
-  Qd = bus_file[:,4] / baseMVA
-  gen_id = Int.(gen_file[:,1])
-  Pg = gen_file[:,2] / baseMVA
-  Qg = gen_file[:,3] / baseMVA
-
-  Pnet = -Pd
-  Qnet = -Qd
-  for idx in 1:length(gen_id)
-    if bus_type_file[gen_id[idx]] == 2
-      Pnet[gen_id[idx]] += Pg[idx]
-      Qnet[gen_id[idx]] += Qg[idx]
-    end
-  end
-  optimal_values[:Pnet] = Pnet
-  optimal_values[:Qnet] = Qnet
-  return opf2pd(fileout, optimal_values, opfmodeldata, line_type, bus_type, nobus_Bshunt, phys)
-end
-
-
-
-
 
 
 
