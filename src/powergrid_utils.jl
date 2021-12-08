@@ -179,7 +179,7 @@ function simulate_initial_contingencies(ic_ID_vec::AbstractArray{NTuple{N,Int}},
         branches = collect("branch" .* string.(ic_ID))
         fault = LineFailures(line_names=branches, tspan_fault=tspan_fault)
         fault_solution = simulate(fault, powergrid, operationpoint, timespan);
-        generator_indices = findall(bus -> isa(bus, SwingEq), collect(values(powergrid.nodes)))
+        generator_indices = findall(bus -> (isa(bus, SwingEq) | isa(bus, SwingEqLVS)), collect(values(powergrid.nodes)))
         generator_names = "bus" .* string.(generator_indices)
         
         results_dict[(ic_ID,:v)] = fault_solution(timespan[1]:resolution:timespan_cap, :, :v)[generator_indices,:]
