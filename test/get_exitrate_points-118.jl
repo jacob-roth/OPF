@@ -1,29 +1,24 @@
-#const path = "/home/jroth/Projects/planning-large-deviation/data/cases/118-files"
-#const path = "/Users/jakeroth/Desktop/planning-large-deviation/data/cases/118-files"
-const path = "/home/asubramanyam/research/planning-large-deviation/data/cases/118-files"
-
 using Distributed
+@everywhere PROJ_DIR = joinpath(dirname(@__FILE__), "..")
 @everywhere using Pkg
-@everywhere Pkg.activate("..")
+@everywhere Pkg.activate("$PROJ_DIR")
 @everywhere Pkg.instantiate()
 @everywhere begin
     using MPCCases, StructArrays, LinearAlgebra, ForwardDiff, Printf, SharedArrays, JuMP, Ipopt
     using TimerOutputs
-    include("../src/default.jl")
-    include("../src/exitrates.jl")
+    include("$PROJ_DIR/src/default.jl")
+    include("$PROJ_DIR/src/exitrates.jl")
 end
-import Pkg; Pkg.activate(".."); Pkg.instantiate()
-include("../src/OPF.jl")
+import Pkg; Pkg.activate("$PROJ_DIR"); Pkg.instantiate()
+include("$PROJ_DIR/src/OPF.jl")
 using DelimitedFiles
 
 ## -----------------------------------------------------------------------------
 ## data input
 ## -----------------------------------------------------------------------------
 
-fileout = "/home/jroth/Projects/planning-large-deviation/data/optimalvalues/118bus_lowdamp/"
-fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/"
-fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/"
-fileout = "./___temp___/"
+path = joinpath(dirname(@__FILE__), "..", "data")
+fileout = joinpath(dirname(@__FILE__), "___temp___") #joinpath(dirname(@__FILE__), "output", "numerical_performance_118_tol=1e-06")
 case_name = "mpc_lowdamp_pgliblimits"
 
 options = DefaultOptions()
@@ -35,6 +30,22 @@ options[:remove_Bshunt]  = false
 options[:remove_tap]     = true
 options[:shed_load]      = false
 options[:print_level]    = 5
+options[:allow_pf_infeas]= false
+options[:linear_solver]  = "ma27"
+options[:tol]            = 1e-6
+#---------------------- NOTE ----------------------
+# after review-1, the results in Table II were obtained
+# using Ipoptv0.6.5 (see Project.toml [compat])
+# with
+#     em = Model(solver = IpoptSolver(print_level=options[:print_level]))
+# inside `compute_exitrate_exact`
+# and with
+#     em = Model(solver = IpoptSolver(print_level=options[:print_level],max_iter=1000))
+# inside `compute_exitrate_kkt`
+# and with
+# options[:tol] = 1e-9 for the main_nlp
+# options[:linear_solver] = "mumps"
+#--------------------------------------------------
 
 function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, ratelimits::Array{T,1},
                            options0::Dict, fileout::String) where T <: AbstractFloat
@@ -66,9 +77,9 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
             optimal_values[:status] = string(opfmodel_exitrates.status)
             scale_fmt = @sprintf("%0.0d", Int(round(100(options[:constr_limit_scale]-1.0), digits=0)))
             rate_fmt  = @sprintf("%0.0e", options[:ratelimit])
-            file_out = fileout * "emergency=$(scale_fmt)pct/$(rate_fmt)/"
+            file_out = joinpath(fileout, "emergency=$(scale_fmt)pct", "$(rate_fmt)")
             mkpath(file_out)
-            write_optimal_values(file_out, optimal_values)
+            write_optimal_values(file_out * "/", optimal_values)
         end
         push!(models, j_models)
 
@@ -99,9 +110,9 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
         options[:print_level] = pl
         optimal_values[:rates] = rates
         optimal_values[:status] = string(scopfmodel_acopf.status)
-        file_out = fileout * "N_1/"
+        file_out = joinpath(fileout, "N_1")
         mkpath(file_out)
-        write_optimal_values(file_out, optimal_values)
+        write_optimal_values(file_out * "/", optimal_values)
     end
     return models
 end
