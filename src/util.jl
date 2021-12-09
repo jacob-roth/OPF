@@ -555,6 +555,7 @@ function get_opfmodeldata(casedata::CaseData, options::Dict=DefaultOptions(), ad
   return opfmodeldata
 end
 
+#=
 function get_S(casedata::CaseData)
   nbus  = length(casedata.opf.buses)
   ngen  = length(casedata.opf.generators)
@@ -590,6 +591,37 @@ function get_S(casedata::CaseData)
   end
 
   return Sdiag
+end
+=#
+
+function get_S(casedata::CaseData)
+    opfdata = casedata.opf
+    buses = opfdata.buses
+    phys = casedata.phys
+    nbus = length(buses)
+    slackbus_idx = opfdata.bus_ref
+    slackbus_ID = buses[slackbus_idx].bus_i
+    loadbus_IDs = Int[]
+    for n in 1:nbus
+      (n == slackbus_idx || !isempty(opfdata.BusGenerators[n])) && continue
+      push!(loadbus_IDs, buses[n].bus_i)
+    end
+    nload = length(loadbus_IDs)
+    nonslackbus_IDs = filter(x -> x ∉ slackbus_ID, buses.bus_i)
+    @assert length(nonslackbus_IDs) == nbus - 1
+
+    Sdiag = zeros(nload + nbus - 1)
+    for (S_idx, bus_ID) in enumerate([loadbus_IDs; nonslackbus_IDs])
+      @assert length(filter(x -> phys[x].ID == bus_ID, 1:length(phys))) == 1
+      phys_idx = filter(x -> phys[x].ID == bus_ID, 1:length(phys))[1]
+      if (bus_ID in loadbus_IDs) && (S_idx <= nload)
+        Sdiag[S_idx] = 1.0 / phys[phys_idx].Dv
+      elseif (bus_ID in loadbus_IDs) && (S_idx > nload)
+        Sdiag[S_idx] = 1.0 / phys[phys_idx].D
+      end
+    end
+
+    return Sdiag
 end
 
 function update_loadings!(opfdata::OPFData, options::Dict,
@@ -964,6 +996,103 @@ function check_feasibility(check_point::Dict, opfdata::OPFData, options::Dict, f
     else
         return false, infeas_dict
     end
+end
+
+function check_Nminus1_feasibility(pg_ref::Vector{Float64}, opfdata::OPFData, options::Dict, adjustments::Dict=DefaultAdjustments())
+
+    contingencies = get_all_contingencies(opfdata, options)
+    feasible_ctgs = Dict{Int, Any}()
+
+    for c_id in keys(contingencies)
+        #
+        # contingency (line removal)
+        #
+        c = contingencies[c_id];
+        @assert(c.c_type == :line)
+        rl = remove_line!(opfdata, c_id);
+
+        #
+        # model
+        #
+        opfmodeldata = get_opfmodeldata(opfdata, options, adjustments)
+        opfmodel = Model(solver=IpoptSolver(print_level=0, tol=options[:tol], max_iter=options[:iterlim], max_cpu_time=options[:max_cpu_time]))
+        nbus = length(opfmodeldata[:buses]); nline = length(opfmodeldata[:lines]); ngen = length(opfmodeldata[:generators])
+
+        ## bound constrained variables
+        @variable(opfmodel, opfmodeldata[:generators][i].Pmin <= Pg[i=1:ngen] <= opfmodeldata[:generators][i].Pmax)
+        @variable(opfmodel, opfmodeldata[:generators][i].Qmin <= Qg[i=1:ngen] <= opfmodeldata[:generators][i].Qmax)
+        @variable(opfmodel, (1 - options[:ctg_Vm_adj])*opfmodeldata[:buses][i].Vmin <= Vm[i=1:nbus] <= (1 + options[:ctg_Vm_adj])*opfmodeldata[:buses][i].Vmax)
+        @variable(opfmodel, -pi <= Va[i=1:nbus] <= pi)
+
+        @variable(opfmodel, -abs(opfmodeldata[:buses][i].Pd) <= Ps[i=1:nbus] <= abs(opfmodeldata[:buses][i].Pd), start = 0) # real power shed
+        @variable(opfmodel, -abs(opfmodeldata[:buses][i].Qd) <= Qs[i=1:nbus] <= abs(opfmodeldata[:buses][i].Qd), start = 0) # reactive power shed
+        setlowerbound.(Ps, 0); setupperbound.(Ps, 0)
+        setlowerbound.(Qs, 0); setupperbound.(Qs, 0)
+
+        setlowerbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
+        setupperbound(Va[opfdata.bus_ref], opfmodeldata[:buses][opfdata.bus_ref].Va)
+
+        ## ramping limits
+        for i in 1:ngen
+            @constraint(opfmodel, Pg[i] - pg_ref[i] <= options[:ramp_pct] * opfmodeldata[:generators].Pmax[i])
+            @constraint(opfmodel, pg_ref[i] - Pg[i] <= options[:ramp_pct] * opfmodeldata[:generators].Pmax[i])
+        end
+
+
+        #
+        # power flow balance
+        #
+        islanding_buses = get_islanding_buses(opfmodeldata, options)
+        for b in 1:nbus
+            if b ∉ islanding_buses
+                ## real part
+                add_p_constraint!(opfmodel, opfmodeldata, b)
+                ## imaginary part
+                add_q_constraint!(opfmodel, opfmodeldata, b)
+            end
+        end
+
+        #
+        # branch/lines flow limits
+        #
+        for l in filter(x -> x != c_id, keys(contingencies))
+            if options[:current_rating]
+                ## current
+                add_line_current_constraint!(opfmodel, opfmodeldata, options, l)
+            else
+                ## apparent power (to & from)
+                add_line_power_constraint!(opfmodel, opfmodeldata, l)
+            end
+        end
+
+        #
+        # Set objective
+        #
+        @NLobjective(opfmodel, Min, 0) # sum(Ps[b]^2 + Qs[b]^2 for b in 1:nbus))
+
+        #
+        # Solve model
+        #
+        opfmodel, status = acopf_solve(opfmodel, opfdata)
+
+        #
+        # contingency (line reinstatement)
+        #
+        reinstate_line!(opfdata, rl.id, rl);
+
+
+        #
+        # check feasibility
+        #
+        if status == :Optimal
+            #objval = getobjectivevalue(opfmodel)
+            #if objval <= options[:tol]
+                l = Int(c_id)
+                feasible_ctgs[l] = (c_type=:line, asset=deepcopy(opfdata.lines[l]))
+            #end
+        end
+    end
+    return feasible_ctgs
 end
 
 # function get_optimal_values(opfmodel::JuMP.Model, opfmodeldata::Dict)

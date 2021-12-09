@@ -1,31 +1,24 @@
-const path = "/home/jroth/Projects/planning-large-deviation/data/cases/118-files"
-const path = "/Users/jakeroth/Desktop/planning-large-deviation/data/cases/118-files"
-const path = "/home/asubramanyam/research/planning-large-deviation/data/cases/118-files"
-const tol = 1e-9
-const plotting = false
-
 using Distributed
+@everywhere PROJ_DIR = joinpath(dirname(@__FILE__), "..")
 @everywhere using Pkg
-@everywhere Pkg.activate("..")
+@everywhere Pkg.activate("$PROJ_DIR")
 @everywhere Pkg.instantiate()
 @everywhere begin
     using MPCCases, StructArrays, LinearAlgebra, ForwardDiff, Printf, SharedArrays, JuMP, Ipopt
     using TimerOutputs
-    include("../src/default.jl")
-    include("../src/exitrates.jl")
+    include("$PROJ_DIR/src/default.jl")
+    include("$PROJ_DIR/src/exitrates.jl")
 end
-import Pkg; Pkg.activate(".."); Pkg.instantiate()
-include("../src/OPF.jl")
+import Pkg; Pkg.activate("$PROJ_DIR"); Pkg.instantiate()
+include("$PROJ_DIR/src/OPF.jl")
 using DelimitedFiles
 
 ## -----------------------------------------------------------------------------
 ## data input
 ## -----------------------------------------------------------------------------
 
-fileout = "/home/jroth/Projects/planning-large-deviation/data/optimalvalues/118bus_lowdamp/"
-fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/"
-fileout = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/"
-fileout = "./___temp___/"
+path = joinpath(dirname(@__FILE__), "..", "data")
+fileout = joinpath(dirname(@__FILE__), "___temp___") #joinpath(dirname(@__FILE__), "output", "numerical_performance_118_tol=1e-06")
 case_name = "mpc_lowdamp_pgliblimits"
 
 options = DefaultOptions()
@@ -34,9 +27,25 @@ options[:ratelimit]      = NaN
 options[:current_rating] = true
 options[:lossless]       = true
 options[:remove_Bshunt]  = false
-options[:remove_tap]     = false
-options[:shed_load]      = true
+options[:remove_tap]     = true
+options[:shed_load]      = false
 options[:print_level]    = 5
+options[:allow_pf_infeas]= false
+options[:linear_solver]  = "ma27"
+options[:tol]            = 1e-6
+#---------------------- NOTE ----------------------
+# after review-1, the results in Table II were obtained
+# using Ipoptv0.6.5 (see Project.toml [compat])
+# with
+#     em = Model(solver = IpoptSolver(print_level=options[:print_level]))
+# inside `compute_exitrate_exact`
+# and with
+#     em = Model(solver = IpoptSolver(print_level=options[:print_level],max_iter=1000))
+# inside `compute_exitrate_kkt`
+# and with
+# options[:tol] = 1e-9 for the main_nlp
+# options[:linear_solver] = "mumps"
+#--------------------------------------------------
 
 function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, ratelimits::Array{T,1},
                            options0::Dict, fileout::String) where T <: AbstractFloat
@@ -46,12 +55,6 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
     physdata = casedata.phys
     models = []
 
-    ## acopf
-    options[:shed_load] = false
-    opfmodel = acopf_model(opfdata, options)
-    opfmodel_acopf = acopf_solve(opfmodel, opfdata)
-    acopf_outputAll(opfmodel_acopf, opfdata, options)
-
     ##
     ## exitrates
     ##
@@ -60,7 +63,6 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
         options[:constr_limit_scale] = constr_limit_scales[i]
         j_models = []
         for j in eachindex(ratelimits)
-            options[:shed_load] = true
             options[:ratelimit] = ratelimits[j]
             println("\nline scale = $(options[:constr_limit_scale])x")
             println("rate limit = $(@sprintf("%0.0e", options[:ratelimit]))\n")
@@ -75,14 +77,13 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
             optimal_values[:status] = string(opfmodel_exitrates.status)
             scale_fmt = @sprintf("%0.0d", Int(round(100(options[:constr_limit_scale]-1.0), digits=0)))
             rate_fmt  = @sprintf("%0.0e", options[:ratelimit])
-            file_out = fileout * "emergency=$(scale_fmt)pct/$(rate_fmt)/"
+            file_out = joinpath(fileout, "emergency=$(scale_fmt)pct", "$(rate_fmt)")
             mkpath(file_out)
-            write_optimal_values(file_out, optimal_values)
+            write_optimal_values(file_out * "/", optimal_values)
         end
         push!(models, j_models)
 
         ## N-1
-        options[:ramp_pct] = 0.01
         casedata = load_case(case_name, path; other=true);
         opfmodeldata = get_opfmodeldata(casedata.opf, options)
         contingencies = get_all_contingencies(casedata.opf, options)
@@ -109,31 +110,34 @@ function set_optimalvalues(case_name::String, constr_limit_scales::Array{T,1}, r
         options[:print_level] = pl
         optimal_values[:rates] = rates
         optimal_values[:status] = string(scopfmodel_acopf.status)
-        file_out = fileout * "N_1/"
+        file_out = joinpath(fileout, "N_1")
         mkpath(file_out)
-        write_optimal_values(file_out, optimal_values)
+        write_optimal_values(file_out * "/", optimal_values)
     end
     return models
 end
 
-constr_limit_scales = [1.04] #round.(collect(range(1.0, stop=1.1, step=0.02)).^2, digits=2)
-ratelimits = [Inf, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11] #[Inf; exp10.(collect(range(3, stop=-4, step=-1)))]
-models1 = set_optimalvalues(case_name, constr_limit_scales[1:1], ratelimits, options, fileout)
-ratelimits = [1e-12, 1e-16, 1e-20, 1e-24, 1e-28, 1e-30]
-models2 = set_optimalvalues(case_name, constr_limit_scales[1:1], ratelimits, options, fileout)
+function check_reliability(case_name::String, constr_limit_scales::Array, ratelimits::Array, options0::Dict)
+    casedata = load_case(case_name, path; other=true)
+    opfdata = casedata.opf
+    options = deepcopy(options0)
 
-ratelimits = [1e-30, 1e-40, 1e-50, 1e-60]
-models = set_optimalvalues(case_name, constr_limit_scales[1:1], ratelimits, options, fileout)
-
-# set_optimalvalues(case_name, constr_limit_scales[1:end], ratelimits[1:end], options, fileout)
-sumrates = zeros(length(models[1]))
-for i in eachindex(models[1])
-    sumrates[i] = sum(models[1][i].other[:rates])
+    for i in eachindex(constr_limit_scales)
+        options[:constr_limit_scale] = constr_limit_scales[i]
+        for j in eachindex(ratelimits)
+            options[:ratelimit] = ratelimits[j]
+            scale_fmt = @sprintf("%0.0d", Int(round(100(options[:constr_limit_scale]-1.0), digits=0)))
+            rate_fmt  = @sprintf("%0.0e", options[:ratelimit])
+            file_out = fileout * "emergency=$(scale_fmt)pct/$(rate_fmt)"
+            pg_ref = readdlm("$(file_out)/Pg.csv")[:,1]
+            # pg_ref = readdlm("/home/asubramanyam/research/OPF/test/___temp___/N_1/Pg.csv")[:,1]
+            feasible_ctgs = check_Nminus1_feasibility(pg_ref, opfdata, options)
+            println("constr_limit_scale = $(options[:constr_limit_scale]), ratelimit = $(options[:ratelimit]) => reliability = ", length(feasible_ctgs), "/", length(opfdata.lines))
+        end
+    end
 end
 
-
-# file_out1 = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/1e-30/"
-# file_out2 = "/Users/jakeroth/Desktop/planning-large-deviation/data/optimalvalues/118bus_lowdamp/ytap_yshunt/emergency=4pct/1e-30_v2/"
-# x1 = readdlm(file_out1 * "rates.csv")
-# x2 = readdlm(file_out2 * "rates.csv")
-# norm(x1-x2)
+constr_limit_scales = [1.20]
+ratelimits = [Inf, 1e-9, 1e-12, 1e-15]
+models = set_optimalvalues(case_name, constr_limit_scales[1:1], ratelimits, options, fileout)
+check_reliability(case_name, constr_limit_scales, ratelimits, options)

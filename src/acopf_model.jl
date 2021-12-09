@@ -3,7 +3,7 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   # model
   #
   opfmodeldata = get_opfmodeldata(opfdata, options, adjustments)
-  opfmodel = Model(solver=IpoptSolver(print_level=options[:print_level], tol=options[:tol], max_iter=options[:iterlim], max_cpu_time=options[:max_cpu_time]))
+  opfmodel = Model(solver=IpoptSolver(print_level=options[:print_level], tol=options[:tol], max_iter=options[:iterlim], max_cpu_time=options[:max_cpu_time], linear_solver=options[:linear_solver]))
   nbus = length(opfmodeldata[:buses]); nline = length(opfmodeldata[:lines]); ngen = length(opfmodeldata[:generators])
 
   ## bound constrained variables
@@ -17,8 +17,8 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   # @variable(opfmodel, 0.0 <= Qs[i=1:nbus] <= abs(opfmodeldata[:buses][i].Qd)) # reactive power shed
 
   ## option 2
-  @variable(opfmodel, -abs(opfmodeldata[:buses][i].Pd) <= Ps[i=1:nbus] <= abs(opfmodeldata[:buses][i].Pd)) # real power shed
-  @variable(opfmodel, -abs(opfmodeldata[:buses][i].Qd) <= Qs[i=1:nbus] <= abs(opfmodeldata[:buses][i].Qd)) # reactive power shed
+  @variable(opfmodel, Ps[i=1:nbus], start = 0) # real power shed
+  @variable(opfmodel, Qs[i=1:nbus], start = 0) # reactive power shed
 
 
   if options[:pw_angle_limits] == true
@@ -47,6 +47,11 @@ function acopf_model(opfdata::OPFData, options::Dict=DefaultOptions(), adjustmen
   ## objective
   if options[:shed_load]
     @NLobjective(opfmodel, Min, sum(Ps[b]^2 + Qs[b]^2 for b in 1:nbus))
+  elseif options[:allow_pf_infeas] && !isinf(options[:VOLL])
+    @NLobjective(opfmodel, Min, (1.0/options[:VOLL])*sum( opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-2]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])^2
+                                    +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n-1]*(opfmodeldata[:baseMVA]*opfmodel[:Pg][i])
+                                    +opfmodeldata[:generators][i].coeff[opfmodeldata[:generators][i].n  ] for i=1:length(opfmodeldata[:generators])) +
+                                    sum((opfmodel[:Ps][b]^2+opfmodel[:Qs][b]^2) for b in 1:opfmodeldata[:nbus]))
   else
     setlowerbound.(Ps, 0); setupperbound.(Ps, 0)
     setlowerbound.(Qs, 0); setupperbound.(Qs, 0)
