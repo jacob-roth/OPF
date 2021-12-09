@@ -990,7 +990,7 @@ function compute_exitrate_exact(l::Int, xbar::Dict, opfmodeldata::Dict, options:
     # --------------------
     # solve constrained energy minimization problem
     # --------------------
-    em = Model(solver = IpoptSolver(print_level=options[:print_level]))
+    em = Model(solver = IpoptSolver(print_level=options[:print_level], tol=options[:tol], linear_solver=options[:linear_solver]))
 
     #
     # Variables
@@ -1135,7 +1135,7 @@ function compute_exitrate_kkt(l::Int, xbar::Dict, opfmodeldata::Dict, options::D
     # --------------------
     # solve KKT system
     # --------------------
-    em = Model(solver = IpoptSolver(print_level=options[:print_level],max_iter=1000))
+    em = Model(solver = IpoptSolver(print_level=options[:print_level], tol=options[:tol], linear_solver=options[:linear_solver]))
 
     #
     # Variables

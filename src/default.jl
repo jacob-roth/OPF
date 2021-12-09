@@ -26,6 +26,8 @@ function DefaultOptions()
   D[:zip]            = zip0
   D[:sol]            = sol0
   D[:tol]            = 1e-9
+  D[:linear_solver]  = "mumps"
+  D[:allow_pf_infeas]= false
   #
   # Options for enforcing transition rate limits
   #
