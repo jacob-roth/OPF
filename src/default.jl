@@ -7,6 +7,7 @@ function DefaultOptions()
   D[:loss_scale]     = 1.0     ## scaling of real component of admittance elements
   D[:current_rating] = false   ## use |i| for line limits?
   D[:nonneg_Bshunt]  = false   ## make bus shunts nonnegative?
+  D[:nobus_Bshunt]   = false   ## remove bus shunts?
   D[:remove_Bshunt]  = false   ## remove bus and line shunts?
   D[:remove_tap]     = false   ## remove tap adjustments?
   D[:print_level]    = 0       ## 0: no printing

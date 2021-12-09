@@ -35,15 +35,23 @@ function check_branch_idx(casefile_path::String, powergrid::PowerGrid)
 end
 
 # Check branch admittance and shunts were entered correctly
-function check_admittance_and_shunts(casefile_path::String, powergrid::PowerGrid)
+function check_admittance_and_shunts(casefile_path::String, powergrid::PowerGrid, nobus_Bshunt::Bool=false)
     pg_branches = get_pg_branches(powergrid)
-    Y_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.Y", '\t', ComplexF64)
+    if nobus_Bshunt
+        Y_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.Y_nobus_yesbranch", '\t', ComplexF64)
+    else
+        Y_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.Y", '\t', ComplexF64)
+    end
     Y_vec = [(real(Y_file[line_pairs[1], line_pairs[2]]), -imag(Y_file[line_pairs[1], line_pairs[2]])) for line_pairs in pg_branches]
 
     line_types = get_line_types(powergrid)
     if (length(line_types) == 1) & (first(line_types) == PiModelLine)
         pg_admittance, pg_shunt = get_pg_admittance_and_shunt(line_types)
-        y_shunt_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.y_shunt_arr", '\t', ComplexF64) 
+        if nobus_Bshunt
+            y_shunt_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.y_shunt_nobus_Bshunt_arr", '\t', ComplexF64)  
+        else
+            y_shunt_file = readdlm(casefile_path * "mpc_lowdamp_pgliblimits.y_shunt_arr", '\t', ComplexF64) 
+        end
         y_shunt_vec = [(y_shunt_file[line_pairs[1], line_pairs[2]], y_shunt_file[line_pairs[2], line_pairs[1]]) for line_pairs in pg_branches]
         @assert pg_admittance == Y_vec
         @assert pg_shunt == y_shunt_vec
@@ -67,31 +75,42 @@ function get_Pnet_and_Qnet(operatingdata_path::String, powergrid::PowerGrid)
     return Pnet, Qnet
 end
 
+function get_Vm_and_Va(operatingdata_path::String, powergrid::PowerGrid)
+    nodes = powergrid.nodes
+    num_nodes = length(nodes)
+    Vm = reshape(readdlm(operatingdata_path * "Vm.csv"), num_nodes)
+    Va = reshape(readdlm(operatingdata_path * "Va.csv"), num_nodes)
+    return Vm, Va
+end
+
 # Check bus data was entered correctly
-function check_bus_data(casefile_path::String, operatingdata_path::String, powergrid::PowerGrid; 
-                        Ω::Real, H::Real, D::Real)
+function check_bus_data(casefile_path::String, operatingdata_path::String, powergrid::PowerGrid,
+                        Ω::Real, H::Real, D::Real, Γ::Real)
     bus_types = get_bus_types(casefile_path)
     Pnet, Qnet = get_Pnet_and_Qnet(operatingdata_path, powergrid)
+    Vm, Va = get_Vm_and_Va(operatingdata_path, powergrid)
     nodes = powergrid.nodes
 
     for idx in 1:length(nodes)
-        try 
-            node = nodes[idx]
-            if isa(node, SwingEq)
-                @assert bus_types[idx] == 2
-                @assert node.P == Pnet[idx]
-                @assert node.H == H
-                @assert node.Ω == Ω
-                @assert node.D == D
-            elseif isa(node, PQAlgebraic)
-                @assert bus_types[idx] == 1
-                @assert node.P == Pnet[idx]
-                @assert node.Q == Qnet[idx]
-            end
-        catch e
-            if isa(e, AssertionError)
-                println("idx:", idx)
-            end
+        node = nodes["bus$idx"]
+        if isa(node, SwingEq)
+            @assert bus_types[idx] == 2
+            @assert node.P == Pnet[idx]
+            @assert node.H == H
+            @assert node.Ω == Ω
+            @assert node.D == D
+        elseif isa(node, PQAlgebraic)
+            @assert bus_types[idx] == 1
+            @assert node.P == Pnet[idx]
+            @assert node.Q == Qnet[idx]
+        elseif isa(node, SwingEqLVS)
+            @assert bus_types[idx] == 2
+            @assert node.P == Pnet[idx]
+            @assert node.H == H
+            @assert node.Ω == Ω
+            @assert node.D == D
+            @assert node.Γ == Γ
+            @assert node.V == Vm[idx] * exp(im*Va[idx])
         end
     end
 end

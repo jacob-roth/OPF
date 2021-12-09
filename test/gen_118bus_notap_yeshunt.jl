@@ -7,42 +7,43 @@ case_name = "mpc_lowdamp_pgliblimits"
 l = 50
 include("/Users/jakeroth/git/OPF/src/OPF2PD.jl")
 
-import Pkg; Pkg.activate(".."); Pkg.instantiate()
+import Pkg; Pkg.activate("."); Pkg.instantiate()
 include("../src/OPF.jl"); using DelimitedFiles
-
+using JSON
 ## -----------------------------------------------------------------------------
 ## data input
 ## -----------------------------------------------------------------------------
 
 include("/Users/jakeroth/git/OPF/src/OPF2PD.jl")
 
-options = DefaultOptions()
-options[:emergencylimit] = NaN
-options[:ratelimit]      = NaN
-options[:current_rating] = true
-options[:lossless]       = true
-options[:remove_Bshunt]  = false
-options[:remove_tap]     = true
-options[:shed_load]      = false
-options[:print_level]    = 1
-options[:constr_limit_scale] = 1.04
-options[:pw_angle_limits]= false
-options[:slack0]         = true
+options = DefaultOptions();
+options[:emergencylimit] = NaN;
+options[:ratelimit]      = NaN;
+options[:current_rating] = true;
+options[:lossless]       = true;
+options[:remove_Bshunt]  = false;
+options[:nonneg_Bshunt]  = true;
+options[:remove_tap]     = true;
+options[:shed_load]      = false;
+options[:print_level]    = 1;
+options[:constr_limit_scale] = 1.05;
+options[:pw_angle_limits]= false;
+options[:slack0]         = true;
 
 ## -----------------------------------------------------------------------------
 ## 0 - load case
 ## -----------------------------------------------------------------------------
 
-casedata = load_case(case_name, path; other=true)
-opfdata  = casedata.opf
-opfmodel = acopf_model(opfdata, options)
-opfmodel_acopf = acopf_solve(opfmodel, opfdata)
-opfmodeldata = get_opfmodeldata(opfdata, options)
-opfmodeldata[:Y] = imag.(opfmodeldata[:Y])
-solution = get_optimal_values(opfmodel_acopf.m, opfmodeldata)
+casedata = load_case(case_name, path; other=true);
+opfdata  = casedata.opf;
+opfmodel = acopf_model(opfdata, options);
+opfmodel_acopf = acopf_solve(opfmodel, opfdata);
+opfmodeldata = get_opfmodeldata(opfdata, options);
+opfmodeldata[:Y] = imag.(opfmodeldata[:Y]);
+solution = get_optimal_values(opfmodel_acopf.m, opfmodeldata);
 
-line_type = "PiModelLine"
-phys = physDefault
+line_type = "PiModelLine";
+phys = physDefault;
 opf2pd("/Users/jakeroth/git/PowerDynamics.jl/examples/118busnotapyeshunt/118notapyeshunt.json", solution, opfmodeldata, line_type, phys)
 writedlm("/Users/jakeroth/git/PowerDynamics.jl/examples/118busnotapyeshunt/Pnet.csv", solution[:Pnet])
 writedlm("/Users/jakeroth/git/PowerDynamics.jl/examples/118busnotapyeshunt/Qnet.csv", solution[:Qnet])
