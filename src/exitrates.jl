@@ -109,14 +109,14 @@ function acopf_solve_exitrates(opfmodel::JuMP.Model, casedata, options::Dict=Def
 
 
     ## Recompute all exitrates using exact calculation
-    pl = deepcopy(options[:print_level])
-    options[:print_level] = 0
-    if options[:parallel]
-        compute_exitrate_exact_all_parallel(solution, opfmodeldata, options, other)
-    else
-        compute_exitrate_exact_all_serial(solution, opfmodeldata, options, other)
-    end
-    options[:print_level] = pl
+    # pl = deepcopy(options[:print_level])
+    # options[:print_level] = 0
+    # if options[:parallel]
+    #     compute_exitrate_exact_all_parallel(solution, opfmodeldata, options, other)
+    # else
+    #     compute_exitrate_exact_all_serial(solution, opfmodeldata, options, other)
+    # end
+    # options[:print_level] = pl
 
     return opfmodel, status, other
 end
