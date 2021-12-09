@@ -170,14 +170,20 @@ function import_initial_contingencies(ic_file_path::String)
     return ic_ID_vec
 end
 
-function simulate_initial_contingencies(ic_ID_vec::AbstractArray{NTuple{N,Int}}, 
+function simulate_initial_contingencies(ic_ID_vec::Union{AbstractArray{Int}, AbstractArray{NTuple{N,Int}}}, 
                                         timespan::Tuple{Real, Real}, tspan_fault::Tuple{Real, Real}, 
                                         powergrid::PowerGrid, operationpoint::State,
                                         timespan_cap::Real=20.0, resolution::Real=1e-3) where {N}
     results_dict = Dict()
     for ic_ID in ic_ID_vec
-        branches = collect("branch" .* string.(ic_ID))
-        fault = LineFailures(line_names=branches, tspan_fault=tspan_fault)
+        if length(ic_ID) == 1
+            branches = "branch" * string(ic_ID)
+            fault = LineFailure(line_name=branches, tspan_fault=tspan_fault)
+        else
+            branches = collect("branch" .* string.(ic_ID))
+            fault = LineFailures(line_names=branches, tspan_fault=tspan_fault)
+        end
+        println("branches: ", branches)
         fault_solution = simulate(fault, powergrid, operationpoint, timespan);
         generator_indices = findall(bus -> (isa(bus, SwingEq) | isa(bus, SwingEqLVS)), collect(values(powergrid.nodes)))
         generator_names = "bus" .* string.(generator_indices)
@@ -213,4 +219,51 @@ function findall_big_delta(abs_delta_dict::Dict, tol::Real=0.01)
         all_big_delta_dict[(ic_ID, variable)] = all_big_delta_idx
     end
     return all_big_delta_dict
+end
+
+function findlast_big_delta(all_big_delta_dict::Dict)
+    last_big_delta_dict = Dict()
+    for (ic_ID, variable) in keys(all_big_delta_dict)
+        big_delta_arr = all_big_delta_dict[(ic_ID, variable)]
+        last_big_delta_dict[(ic_ID, variable)] = Vector{Int}(undef, length(big_delta_arr))
+        for gen_idx in 1:length(big_delta_arr)
+            if isempty(big_delta_arr[gen_idx])
+                last_big_delta_dict[(ic_ID, variable)][gen_idx] = 1
+            else
+                last_big_delta_dict[(ic_ID, variable)][gen_idx] = last(big_delta_arr[gen_idx])
+            end
+        end
+    end
+    return last_big_delta_dict
+end
+
+function check_all_last_big_delta_before_T(last_big_delta_dict::Dict, 
+                                           timespan::Tuple{Real, Real}, resolution::Real, timespan_cap::Real)
+    length_of_delta = length(timespan[1]:resolution:timespan_cap)-1
+    all_last_big_delta_before_T = Dict()
+    for (ic_ID, variable) in keys(last_big_delta_dict)
+        all_last_big_delta_before_T[(ic_ID, variable)] = all(last_big_delta_dict[(ic_ID, variable)] .<= length_of_delta)
+    end
+    return all_last_big_delta_before_T
+end
+
+function get_last_big_delta_times_dict(last_big_delta_dict::Dict)
+    last_big_delta_times_dict = Dict()
+    for (ic_ID, variable) in keys(last_big_delta_dict)
+        # filtered_arr = filter(x -> x > 0, last_big_delta_dict[(ic_ID, variable)])
+        last_big_delta_times_dict[(ic_ID, variable)] = (timespan[1]:resolution:timespan_cap)[last_big_delta_dict[(ic_ID, variable)]]
+    end
+    return last_big_delta_times_dict
+end
+
+function aggregate_last_big_delta_times_dict(last_big_delta_times_dict::Dict)
+    agg_dict = Dict()
+    for (ic_ID, variable) in keys(last_big_delta_times_dict)
+        if haskey(agg_dict, variable)
+            append!(agg_dict[variable], last_big_delta_times_dict[(ic_ID, variable)])
+        else
+            agg_dict[variable] = []
+        end
+    end
+    return agg_dict
 end
