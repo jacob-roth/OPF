@@ -84,7 +84,7 @@ function opf2pd(fileout::String, optimal_values::Dict, opfmodeldata::Dict, line_
   end
 
   from_to_pairs = Set{Tuple{Int, Int}}()
-  for l = setdiff(1:nline, failed_line, ic_IDs)
+  for l in setdiff(1:nline, failed_line, ic_IDs)
     f = opfmodeldata[:lines][l].from
     t = opfmodeldata[:lines][l].to
     ff = min(f,t) # need to have from.id <= to.id for PD lightgraphs dependency
